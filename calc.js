@@ -237,6 +237,14 @@ var DZCalc = (function () {
     var P = CAT.P;
     var b = bocaditos(CAT, payload.bocaditos, P);
     var t = bocaditos(CAT, payload.tematicos, P);
+    // Ajuste de pack (17/11/2026): los packs de sacramentos se cobran redondeados hacia abajo; el descuento va como una línea negativa
+    var ajTem = Math.round((Number(payload.ajusteTem) || 0) * 100) / 100;
+    if (ajTem > 0 && t.lineas.length) {
+      var ax = ajTem / (1 + P.igv);
+      t.lineas.push({ nombre: 'Ajuste de pack (redondeo)', detalle: '', paquetes: 1, unidades: 1, precioPaquete: -ajTem, total: -ajTem, sinIGV: -ax, costo: 0, manoObra: 0, utilidad: -ax });
+      t.total -= ajTem; t.sinIGV -= ax; t.utilidad -= ax; t.igv = t.total - t.sinIGV;
+      t.renta = t.sinIGV * (P.renta || 0); t.utilidadNeta = t.utilidad - t.renta; t.gananciaFamilia = t.utilidadNeta + t.manoObra;
+    }
     var po = bocaditos(CAT, payload.postres, P);
     var cj = cajitas(CAT, payload.cajitas);
     var datos = JSON.stringify(payload);
