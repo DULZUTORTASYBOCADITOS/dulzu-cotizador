@@ -143,6 +143,7 @@
   }
 
   function recalcular() {
+    syncAuto();
     calc = DZCalc.cotizar(CAT, payload());
     guardarLS(LS.borrador, S);
   }
@@ -338,16 +339,63 @@
       '<p class="nota" id="minTotal"></p>' +
       '<p class="nota">Del maestro: tarifa ' + fmt(P.tarifa) + '/h · gastos fijos ' + fmt(P.gfHora) + '/h · margen ' + Math.round((P.margen || 0) * 1000) / 10 + ' % sobre precio · IGV ' + Math.round((P.igv || 0) * 100) + ' %.</p>';
   }
+  // ---------- Cobertura y relleno automáticos (17/11/2026) ----------
+  // Base: torta circular 20 cm x 15 cm de alto = 1.5 recetas de butternache y 360 g de manjar (2 rellenos).
+  // Cobertura escala con la superficie a cubrir (arriba + lados); relleno con el área de la base. Se suma cada piso y la cantidad de tortas.
+  var AUTO = { alto: 15, recetasBase: 1.5, rellenoBase: 360, ing: 'Manjar blanco',
+    cob: [['Mantequilla', 180], ['Chantilly', 250], ['Chocolate blanco', 1000]] };
+  var SUP_BASE = Math.PI * 100 + Math.PI * 20 * 15, AREA_BASE = Math.PI * 100;
+  function medidaPiso(forma, tamano) {
+    var n = String(tamano || '').match(/[\d.]+/g); if (!n) return null;
+    if (forma === 'Circular') { var d = Number(n[0]); return { area: Math.PI * d * d / 4, perim: Math.PI * d }; }
+    var a = Number(n[0]), b = Number(n[1] || n[0]); return { area: a * b, perim: 2 * (a + b) };
+  }
+  function autoFactores() {
+    var sup = 0, area = 0, ok = true;
+    [{ forma: S.forma, tamano: S.tamano }].concat(S.pisos).forEach(function (p) {
+      var m = medidaPiso(p.forma, p.tamano); if (!m) { ok = false; return; }
+      sup += m.area + m.perim * AUTO.alto; area += m.area;
+    });
+    var c = Math.max(1, Math.round(Number(S.cantidad) || 1));
+    return ok ? { recetas: AUTO.recetasBase * sup / SUP_BASE * c, relleno: AUTO.rellenoBase * area / AREA_BASE * c } : null;
+  }
+  function red5(x) { return Math.max(5, Math.round(x / 5) * 5); }
+  function syncAuto() {
+    var f = autoFactores(); if (!f) return;
+    S.rellenos.forEach(function (r, i) {
+      if (!r.auto) return;
+      var g = String(r.auto === 'cob' ? red5(r.base * f.recetas) : red5(f.relleno));
+      if (r.cantidad !== g) {
+        r.cantidad = g;
+        var inp = document.querySelector('[data-in="rCant"][data-i="' + i + '"]'); if (inp && document.activeElement !== inp) inp.value = g;
+      }
+    });
+  }
+  function ponerAuto(tipo) {
+    var f = autoFactores(); if (!f) { toast('No pude leer el tamaño de la torta'); return; }
+    S.rellenos = S.rellenos.filter(function (r) { return r.auto !== tipo && (r.ingrediente || Number(r.cantidad) > 0); });
+    if (tipo === 'cob') AUTO.cob.forEach(function (x) { S.rellenos.push({ ingrediente: x[0], cantidad: '', auto: 'cob', base: x[1] }); });
+    else S.rellenos.push({ ingrediente: AUTO.ing, cantidad: '', auto: 'rel' });
+    ui.abiertos.relleno = true; cambio(true);
+  }
+  function htmlAuto() {
+    var f = autoFactores(); if (!f) return '';
+    var tieneC = S.rellenos.some(function (r) { return r.auto === 'cob'; }), tieneR = S.rellenos.some(function (r) { return r.auto === 'rel'; });
+    return '<div class="chips packs" style="margin-bottom:10px">' +
+      '<button type="button" class="chip" data-a="autoCob" aria-pressed="' + tieneC + '">Cobertura butternache · ' + (Math.round(f.recetas * 100) / 100) + ' recetas</button>' +
+      '<button type="button" class="chip" data-a="autoRel" aria-pressed="' + tieneR + '">Relleno (2 capas) · ' + red5(f.relleno) + ' g</button></div>';
+  }
   function htmlRelleno() {
-    var h = '';
+    var h = htmlAuto();
     S.rellenos.forEach(function (r, i) {
       var cu = CAT.ingredientes[String(r.ingrediente).trim()];
       h += '<div class="it"><div class="t"><button type="button" class="n" data-a="elegirIng" data-i="' + i + '">' + (r.ingrediente ? esc(r.ingrediente) : '<span style="color:var(--tenue)">Elegir ingrediente</span>') + ICON_CHEV + '</button>' +
-        '<div class="s">' + (cu != null ? fmt(cu) + ' por g · ' : '') + '<span data-rsub="' + i + '"></span></div></div>' +
+        '<div class="s">' + (r.auto ? 'Automático según tamaño · ' : '') + (cu != null ? fmt(cu) + ' por g · ' : '') + '<span data-rsub="' + i + '"></span></div></div>' +
         '<div class="monto"><input class="input" type="number" inputmode="decimal" placeholder="g" data-in="rCant" data-i="' + i + '" value="' + esc(r.cantidad) + '" aria-label="Gramos de ' + esc(r.ingrediente || 'ingrediente') + '"></div>' +
         '<button type="button" class="quitar" data-a="quitarRelleno" data-i="' + i + '" aria-label="Quitar ingrediente">✕</button></div>';
     });
-    return h + '<button type="button" class="mas" data-a="agregarRelleno">+ Agregar ingrediente</button>';
+    return h + '<button type="button" class="mas" data-a="agregarRelleno">+ Agregar ingrediente</button>' +
+      '<p class="nota">Los botones calculan los gramos según el tamaño, los pisos y la cantidad de tortas (base: circular 20 cm × 15 cm de alto = 1.5 recetas de butternache y 360 g de relleno). Se recalculan solos si cambias el tamaño; si escribes los gramos a mano, quedan fijos. Toca el nombre para cambiar el ingrediente del relleno.</p>';
   }
   function htmlExtras() {
     var h = '';
@@ -890,6 +938,8 @@
         S.pisos.push({ sabor: S.sabor, forma: S.forma || f0, tamano: (CAT.init.tamanosPorForma[S.forma || f0] || [])[0] || '' });
         cambio(true); break; }
       case 'quitarPiso': S.pisos.splice(i, 1); cambio(true); break;
+      case 'autoCob': ponerAuto('cob'); break;
+      case 'autoRel': ponerAuto('rel'); break;
       case 'agregarRelleno': S.rellenos.push({ ingrediente: '', cantidad: '' }); cambio(true); elegirIng(S.rellenos.length - 1); break;
       case 'elegirIng': elegirIng(i); break;
       case 'quitarRelleno': S.rellenos.splice(i, 1); cambio(true); break;
@@ -988,7 +1038,7 @@
     if (k === 'cliente') { S.cliente = el.value; guardarLS(LS.borrador, S); if (S.estado !== 'nueva') { S.estado = 'nueva'; S.id = uid(); S.hojaUrl = ''; } return; }
     if (k === 'q') { ui.q = el.value; $('prodLista').innerHTML = htmlListaProductos(); $('packsTem').innerHTML = htmlPacksTem(); return; }
     if (k === 'hq') { ui.hq = el.value; ui.hn = 30; $('histLista').innerHTML = htmlListaH(); return; }
-    if (k === 'rCant') { S.rellenos[i].cantidad = el.value; cambio(false); return; }
+    if (k === 'rCant') { S.rellenos[i].cantidad = el.value; delete S.rellenos[i].auto; cambio(false); return; }
     if (k === 'cRCant') { S.caj.rellenos[i].cantidad = el.value; cambio(false); return; }
     if (k === 'cajCosto') { S.caj.costoCajita = el.value; cambio(false); return; }
     if (k === 'cajN') { var nc = Math.round(Number(el.value)); if (nc >= 1) { S.caj.n = nc; cajAuto(); cambio(false); } return; }
