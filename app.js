@@ -414,6 +414,32 @@
     return h + '<p class="nota">Pon los gramos que lleva la rectangular completa (mismo relleno y cobertura que la torta).</p>';
   }
 
+  // ---------- packs de temáticos (17/11/2026): los de "Packs de sacramentos"; suman los temáticos de golpe ----------
+  var PACKS_TEM = [
+    { n: 'Detalle', c: { cakepop: 3, galleta: 3 } },
+    { n: 'Clásico', c: { cakepop: 4, galleta: 4, cupcake: 4 } },
+    { n: 'Celebración', c: { cakepop: 5, galleta: 4, cupcake: 3, chocobrownie: 3 } },
+    { n: 'Gran celebración', c: { cakepop: 8, galleta: 6, lacepop: 6, cupcake: 5, chocobrownie: 5 } }
+  ];
+  function productoTem(clave) {
+    var k = norm(clave).replace(/s$/, '');
+    for (var i = 0; i < GRUPOS.tem.length; i++) { if (norm(GRUPOS.tem[i].nombre).replace(/[^a-z]/g, '').indexOf(k) >= 0) return GRUPOS.tem[i]; }
+    return null;
+  }
+  function packTemLineas(pk) {
+    var out = [], falta = [];
+    Object.keys(pk.c).forEach(function (k) { var b = productoTem(k); if (b) out.push({ b: b, n: pk.c[k] }); else falta.push(k); });
+    return { lineas: out, falta: falta, uds: out.reduce(function (a, x) { return a + x.n; }, 0), total: out.reduce(function (a, x) { return a + x.n * x.b.precio; }, 0) };
+  }
+  function htmlPacksTem() {
+    if (!GRUPOS.tem.length || !(ui.cat === 'todos' || ui.cat === 'tem') || ui.q) return '';
+    return '<div class="bloque" style="margin:0 0 10px"><span class="lbl">Packs de temáticos (suma de una vez)</span><div class="chips" data-k="packsTem">' +
+      PACKS_TEM.map(function (pk, i) {
+        var r = packTemLineas(pk);
+        return '<button type="button" class="chip" data-a="packTem" data-v="' + i + '" aria-pressed="false">' + esc(pk.n) + ' · ' + r.uds + ' · ' + fmt0(r.total) + '</button>';
+      }).join('') + '</div></div>';
+  }
+
   function htmlProductos() {
     var cats = [['todos', 'Todos', '']];
     var bc = []; GRUPOS.boc.forEach(function (b) { var c = b.categoria || 'Otro'; if (bc.indexOf(c) < 0) bc.push(c); });
@@ -424,7 +450,7 @@
       '<div class="buscar">' + ICON_LUPA + '<input class="input" type="search" id="q" data-in="q" placeholder="Buscar bocaditos, temáticos o postres" value="' + esc(ui.q) + '" autocomplete="off" aria-label="Buscar productos"></div>' +
       '<div class="chips cats" data-k="cats">' + cats.map(function (c) {
         return '<button type="button" class="chip" data-a="cat" data-v="' + esc(c[0]) + '" aria-pressed="' + (ui.cat === c[0]) + '">' + (c[2] ? '<i class="petal p ' + c[2] + '"></i>' : '') + esc(c[1]) + '</button>';
-      }).join('') + '</div><div id="prodLista">' + htmlListaProductos() + '</div>';
+      }).join('') + '</div><div id="packsTem">' + htmlPacksTem() + '</div><div id="prodLista">' + htmlListaProductos() + '</div>';
     return h;
   }
   function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
@@ -864,6 +890,14 @@
       case 'elegirEmp': elegirEmp(v, i); break;
       case 'quitarExtra': S.extras.splice(i, 1); cambio(true); break;
       case 'cat': ui.cat = v; render(); break;
+      case 'packTem': {
+        var pk = PACKS_TEM[Number(v)], rp = packTemLineas(pk);
+        if (!rp.lineas.length) { toast('No encontré esos temáticos en la carta'); break; }
+        var antes = copia(S.items);
+        rp.lineas.forEach(function (x) { S.items[x.b.nombre] = (S.items[x.b.nombre] || 0) + x.n; });
+        cambio(true);
+        toast('Pack ' + pk.n + ' agregado · ' + rp.uds + ' temáticos · ' + fmt0(rp.total) + (rp.falta.length ? ' (faltan: ' + rp.falta.join(', ') + ')' : ''), 3600, { txt: 'Deshacer', fn: function () { S.items = antes; cambio(true); } });
+        break; }
       case 'agregarItem': {
         S.items[v] = 1; cambio(true);
         var pr = PROD[v];
@@ -933,7 +967,7 @@
     var el = e.target, k = el.getAttribute('data-in'); if (!k) return;
     var i = Number(el.getAttribute('data-i'));
     if (k === 'cliente') { S.cliente = el.value; guardarLS(LS.borrador, S); if (S.estado !== 'nueva') { S.estado = 'nueva'; S.id = uid(); S.hojaUrl = ''; } return; }
-    if (k === 'q') { ui.q = el.value; $('prodLista').innerHTML = htmlListaProductos(); return; }
+    if (k === 'q') { ui.q = el.value; $('prodLista').innerHTML = htmlListaProductos(); $('packsTem').innerHTML = htmlPacksTem(); return; }
     if (k === 'hq') { ui.hq = el.value; ui.hn = 30; $('histLista').innerHTML = htmlListaH(); return; }
     if (k === 'rCant') { S.rellenos[i].cantidad = el.value; cambio(false); return; }
     if (k === 'cRCant') { S.caj.rellenos[i].cantidad = el.value; cambio(false); return; }
