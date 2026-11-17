@@ -129,6 +129,7 @@
       bocaditos: [], tematicos: [], postres: [],
       soloBocaditos: !S.conTorta,
       cajitas: cajPayload(),
+      ajusteTem: Number(S.ajusteTem) > 0 ? Number(S.ajusteTem) : 0,
       rellenos: S.rellenos.map(function (r) { return { ingrediente: r.ingrediente, cantidad: String(r.cantidad == null ? '' : r.cantidad) }; }),
       gastosExtra: S.extras.map(function (g) { return { concepto: g.concepto, costo: String(g.costo == null ? '' : g.costo) }; })
     };
@@ -638,7 +639,7 @@
   function nombreMes(k) { var a = k.split('-'); return (MESES[Number(a[1]) - 1] || '') + ' ' + a[0]; }
   function lineasH(txt) {
     return String(txt || '').split('; ').map(function (s) {
-      var m = s.trim().match(/^(.*) x(\d+(?:\.\d+)?) u\.: S\/([\d.]+)$/);
+      var m = s.trim().match(/^(.*) x(\d+(?:\.\d+)?) u\.: S\/(-?[\d.]+)$/);
       return m ? { nombre: m[1], unidades: Number(m[2]), total: Number(m[3]) } : null;
     }).filter(Boolean);
   }
@@ -740,7 +741,9 @@
       p.cajitas = { on: true, n: cj0.unidades, sabor: String(cj0.nombre).replace(/^Torta en cajitas · /, '') };
       avisos.push('Revisa las cajitas: de esa cotización solo quedaron las porciones y el sabor (tamaño, minutos y relleno no).');
     }
-    p.tematicos = lineasH(h.temDet).map(function (l) { return { nombre: l.nombre, paquetes: l.unidades }; });
+    p.tematicos = lineasH(h.temDet).filter(function (l) { return l.total >= 0; }).map(function (l) { return { nombre: l.nombre, paquetes: l.unidades }; });
+    var ajH = lineasH(h.temDet).filter(function (l) { return l.total < 0; })[0];
+    if (ajH) p.ajusteTem = -ajH.total;
     p.postres = lineasH(h.posDet).map(function (l) { return { nombre: l.nombre, paquetes: l.unidades }; });
     return p;
   }
@@ -784,6 +787,7 @@
         return { ingrediente: r.ingrediente, cantidad: r.cantidad };
       });
     }
+    n.ajusteTem = Number(p.ajusteTem) > 0 ? Number(p.ajusteTem) : 0;
     n.items = {};
     [].concat(p.bocaditos || [], p.tematicos || [], p.postres || []).forEach(function (x) {
       if (PROD[x.nombre]) n.items[x.nombre] = Number(x.paquetes) || 0;
@@ -894,9 +898,11 @@
         var pk = PACKS_TEM[Number(v)], rp = packTemLineas(pk);
         if (!rp.lineas.length) { toast('No encontré esos temáticos en la carta'); break; }
         var antes = copia(S.items);
+        var antesAj = S.ajusteTem || 0;
         rp.lineas.forEach(function (x) { S.items[x.b.nombre] = (S.items[x.b.nombre] || 0) + x.n; });
+        S.ajusteTem = Math.round(((S.ajusteTem || 0) + (rp.total - Math.floor(rp.total + 1e-9))) * 100) / 100;
         cambio(true);
-        toast('Pack ' + pk.n + ' agregado · ' + rp.uds + ' temáticos · ' + fmt0(rp.total) + (rp.falta.length ? ' (faltan: ' + rp.falta.join(', ') + ')' : ''), 3600, { txt: 'Deshacer', fn: function () { S.items = antes; cambio(true); } });
+        toast('Pack ' + pk.n + ' agregado · ' + rp.uds + ' temáticos · ' + fmt0(Math.floor(rp.total + 1e-9)) + (rp.falta.length ? ' (faltan: ' + rp.falta.join(', ') + ')' : ''), 3600, { txt: 'Deshacer', fn: function () { S.items = antes; S.ajusteTem = antesAj; cambio(true); } });
         break; }
       case 'agregarItem': {
         S.items[v] = 1; cambio(true);
@@ -930,7 +936,7 @@
     if (CAJMIN[a]) { var kc = CAJMIN[a]; S.caj[kc] = Math.max(0, (Number(S.caj[kc]) || 0) + d * 5); cambio(false); actualizarInput(a, S.caj[kc]); return; }
     if (/^min/.test(a)) { S[a] = Math.max(0, (Number(S[a]) || 0) + d * 5); cambio(false); actualizarInput(a, S[a]); return; }
     if (a.indexOf('item:') === 0) {
-      var n = a.slice(5); var q = Math.max(0, (S.items[n] || 0) + d);
+      var n = a.slice(5); var q = Math.max(0, (S.items[n] || 0) + d); S.ajusteTem = 0;
       if (q === 0) { delete S.items[n]; cambio(true); toast(n + ' quitado', 2600, { txt: 'Deshacer', fn: function () { S.items[n] = 1; cambio(true); } }); return; }
       S.items[n] = q; cambio(false); actualizarInput(a, q); return;
     }
@@ -982,7 +988,7 @@
       cambio(false); return; }
     if (k === 'cantidad') { var c = Math.round(Number(el.value)); if (c >= 1) { S.cantidad = c; cambio(false); } return; }
     if (/^min/.test(k)) { if (el.value !== '' && Number(el.value) >= 0) { S[k] = Number(el.value); cambio(false); } return; }
-    if (k.indexOf('item:') === 0) { var q = Math.round(Number(el.value)); if (q >= 1) { S.items[k.slice(5)] = q; cambio(false); } return; }
+    if (k.indexOf('item:') === 0) { var q = Math.round(Number(el.value)); if (q >= 1) { S.items[k.slice(5)] = q; S.ajusteTem = 0; cambio(false); } return; }
   });
   document.addEventListener('change', function (e) {
     var el = e.target, k = el.getAttribute('data-in'); if (!k) return;
