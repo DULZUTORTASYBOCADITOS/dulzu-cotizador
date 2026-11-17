@@ -87,8 +87,36 @@
       sabor: CAT.init.sabores[0] || '', forma: forma, tamano: (CAT.init.tamanosPorForma[forma] || [])[0] || '',
       nivel: (CAT.niveles[0] || {}).nombre || '',
       minBase: 120, minExtra: 0, minHorno: 50, minBat: 15,
-      pisos: [], rellenos: [], extras: extras, items: {}, cargada: null
+      pisos: [], rellenos: [], extras: extras, items: {}, cargada: null, caj: nuevaCaj()
     };
+  }
+
+  // ---------- torta en cajitas (17/11/2026) ----------
+  // Rectangular sin decoración (mismo sabor, relleno y cobertura) cortada y empacada en cajitas. Se cobra solo el total.
+  function nuevaCaj() {
+    return { on: false, n: 25, sabor: '', tamano: '', tamManual: false, minTrabajo: 60, minHorno: 0, minBat: 0, costoCajita: 0.5, rellenos: [] };
+  }
+  var CAJMIN = { cajMinTrabajo: 'minTrabajo', cajMinHorno: 'minHorno', cajMinBat: 'minBat' };
+  var PORC_POR_CM2 = 30 / (25 * 35); // dato de Katherine: una rectangular de 25x35 rinde 30 porciones
+  function porcionesDe(tam) {
+    var m = String(tam || '').match(/(\d+(?:[.,]\d+)?)\s*[x×X]\s*(\d+(?:[.,]\d+)?)/);
+    if (!m) return null;
+    return Math.floor(parseFloat(m[1].replace(',', '.')) * parseFloat(m[2].replace(',', '.')) * PORC_POR_CM2 + 1e-6);
+  }
+  function cajTamSugerido(n) {
+    var l = (CAT.init.tamanosPorForma.Rectangular || []).filter(function (t) { return porcionesDe(t) != null; });
+    var mejor = '';
+    l.forEach(function (t) { if (porcionesDe(t) >= n && (!mejor || porcionesDe(t) < porcionesDe(mejor))) mejor = t; });
+    if (!mejor && l.length) mejor = l.slice().sort(function (a, b) { return porcionesDe(b) - porcionesDe(a); })[0];
+    return mejor || (CAT.init.tamanosPorForma.Rectangular || [])[0] || '';
+  }
+  function cajAuto(c) { c = c || S.caj; if (!c.tamManual) c.tamano = cajTamSugerido(Number(c.n) || 0); }
+  function cajPayload() {
+    var c = S.caj;
+    if (!c || !c.on) return null;
+    return { on: true, n: Number(c.n) || 0, sabor: c.sabor, tamano: c.tamano,
+      minTrabajo: Number(c.minTrabajo) || 0, minHorno: Number(c.minHorno) || 0, minBat: Number(c.minBat) || 0, costoCajita: Number(c.costoCajita) || 0,
+      rellenos: (c.rellenos || []).map(function (r) { return { ingrediente: r.ingrediente, cantidad: String(r.cantidad == null ? '' : r.cantidad) }; }) };
   }
   function empaque(nombre) { return (CAT.empaques || []).filter(function (e) { return e.nombre === nombre; })[0] || null; }
 
@@ -100,6 +128,7 @@
       pisos: S.pisos.map(function (x) { return { sabor: x.sabor, forma: x.forma, tamano: x.tamano }; }),
       bocaditos: [], tematicos: [], postres: [],
       soloBocaditos: !S.conTorta,
+      cajitas: cajPayload(),
       rellenos: S.rellenos.map(function (r) { return { ingrediente: r.ingrediente, cantidad: String(r.cantidad == null ? '' : r.cantidad) }; }),
       gastosExtra: S.extras.map(function (g) { return { concepto: g.concepto, costo: String(g.costo == null ? '' : g.costo) }; })
     };
@@ -123,7 +152,7 @@
   }
 
   function nProductos() {
-    var n = S.conTorta ? 1 : 0;
+    var n = (S.conTorta ? 1 : 0) + (S.caj && S.caj.on ? 1 : 0);
     Object.keys(S.items).forEach(function (k) { if (S.items[k] > 0 && PROD[k]) n++; });
     return n;
   }
@@ -167,7 +196,7 @@
     if (ui.vista === 'armar') {
       b.textContent = 'Ver resumen'; b.className = 'btn'; b.disabled = np === 0;
     } else if (S.estado === 'nueva') {
-      b.textContent = 'Guardar'; b.className = 'btn'; b.disabled = !!calc.vacio;
+      b.textContent = 'Guardar'; b.className = 'btn'; b.disabled = !!calc.vacio || !!(S.caj.on && r.cajitas && r.cajitas.error);
     } else {
       b.textContent = 'Nueva cotización'; b.className = 'btn sec2'; b.disabled = false;
     }
@@ -175,14 +204,33 @@
     if (tp) tp.innerHTML = S.conTorta && !calc.vacio ? (fmt0(r.precioRedondeado) + (S.cantidad > 1 ? '<small>' + fmt(r.precioUnitario) + ' c/u</small>' : '')) : '';
     var te = $('tortaError');
     if (te) { var err = S.conTorta && r && r.error; te.hidden = !err; te.textContent = err ? 'Sin costo de receta: ' + r.error : ''; }
+    var cj = r.cajitas, cp = $('cajPrecio');
+    if (cp) cp.textContent = S.caj.on && cj && cj.lineas.length ? fmt0(cj.total) : '';
+    var ce = $('cajError');
+    if (ce) { var cer = S.caj.on && cj && cj.error; ce.hidden = !cer; ce.textContent = cer ? 'Sin costo de receta: ' + cj.error : ''; }
+    var cn = $('cajTamNota');
+    if (cn) {
+      var est = porcionesDe(S.caj.tamano), rc = DZCalc.costoReceta(CAT, S.caj.sabor, 'Rectangular', S.caj.tamano), corta = est != null && est < (Number(S.caj.n) || 0);
+      cn.textContent = S.caj.tamano ? S.caj.tamano + (est != null ? ': alcanza para ≈' + est + ' porciones (estimado por área)' : '') + (rc.ok ? ' · receta ' + fmt(rc.costo) : ' · sin receta') + (corta ? '. Ojo: pediste ' + S.caj.n + ', elige un tamaño más grande.' : '') : '';
+      cn.style.color = corta ? 'var(--vino)' : '';
+    }
+    var cra = $('cajRellenoAviso');
+    if (cra) cra.hidden = S.caj.rellenos.some(function (x) { return x.ingrediente && Number(x.cantidad) > 0; });
     var pc = $('prodCuenta');
-    if (pc) { var n = np - (S.conTorta ? 1 : 0); pc.textContent = n ? n + ' ' + plural(n, 'agregado', 'agregados') : ''; }
+    if (pc) { var n = np - (S.conTorta ? 1 : 0) - (S.caj.on ? 1 : 0); pc.textContent = n ? n + ' ' + plural(n, 'agregado', 'agregados') : ''; }
     Array.prototype.forEach.call(document.querySelectorAll('[data-sub]'), function (el) {
       var k = el.getAttribute('data-sub');
       if (k === 'trabajo') el.innerHTML = '<b>' + minutosTotales() + ' min</b> · horno ' + (Number(S.minHorno) || 0);
       if (k === 'relleno') { var n2 = S.rellenos.filter(function (x) { return x.ingrediente && Number(x.cantidad) > 0; }).length; el.innerHTML = n2 ? '<b>' + n2 + '</b> ' + plural(n2, 'ingrediente', 'ingredientes') : 'Ninguno'; }
       if (k === 'extras') { var ex = S.extras.filter(function (x) { return x.concepto && Number(x.costo) > 0; }); el.textContent = ex.length ? ex.map(function (x) { return corto(x.concepto); }).join(', ') : 'Ninguno'; }
+      if (k === 'cajTrabajo') el.innerHTML = '<b>' + (Number(S.caj.minTrabajo) || 0) + ' min</b> · cajita ' + fmt(Number(S.caj.costoCajita) || 0);
+      if (k === 'cajRelleno') { var n3 = S.caj.rellenos.filter(function (x) { return x.ingrediente && Number(x.cantidad) > 0; }).length; el.innerHTML = n3 ? '<b>' + n3 + '</b> ' + plural(n3, 'ingrediente', 'ingredientes') : 'Ninguno'; }
       if (k === 'pisos') el.textContent = S.pisos.length ? S.pisos.length + ' ' + plural(S.pisos.length, 'piso', 'pisos') + ' encima' : 'Ninguno';
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-crsub]'), function (el) {
+      var i = Number(el.getAttribute('data-crsub')); var r2 = S.caj.rellenos[i]; if (!r2) return;
+      var cu = CAT.ingredientes[String(r2.ingrediente).trim()] || 0;
+      el.textContent = r2.ingrediente ? fmt(cu * (Number(r2.cantidad) || 0)) : '';
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-rsub]'), function (el) {
       var i = Number(el.getAttribute('data-rsub')); var r2 = S.rellenos[i]; if (!r2) return;
@@ -220,6 +268,7 @@
       '<button type="button" class="borrar" data-a="borrarTodo"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Nueva cotización</button></div>' +
       '<input class="input" id="cliente" data-in="cliente" autocomplete="off" placeholder="Ej. María · cumpleaños 20 personas" value="' + esc(S.cliente) + '">';
     h += htmlTorta();
+    h += htmlCajitas();
     h += htmlProductos();
     return h;
   }
@@ -324,6 +373,47 @@
   }
   function empaqueTipo(nombre) { var e = empaque(nombre); return e ? e.tipo : null; }
 
+  function htmlCajitas() {
+    var c = S.caj;
+    var h = '<section class="sec" aria-label="Torta en cajitas"><div class="sec-h"><i class="petal c-torta"></i><h2>Torta en cajitas</h2><span class="precio" id="cajPrecio"></span>' +
+      '<button type="button" class="sw" role="switch" aria-checked="' + c.on + '" aria-label="Incluir torta en cajitas" data-a="cajOn"></button></div>';
+    if (!c.on) return h + '<p class="nota" style="padding:0 14px 14px;margin:0">Una torta rectangular sin decoración, del mismo sabor, cortada y empacada en cajitas. Útil cuando piden muchas porciones.</p></section>';
+    h += '<div class="aviso" id="cajError" hidden></div>';
+    h += '<div class="fila"><span class="k">Porciones<small>En cajitas</small></span>' + stepper('cajN', Number(c.n) || 0, 1, { label: 'Porciones en cajitas' }) + '</div>';
+    h += '<div class="fila"><span class="k">Sabor</span><button type="button" class="selector" data-a="cajSabor">' + esc(c.sabor || 'Elegir') + ICON_CHEV + '</button></div>';
+    var tl = CAT.init.tamanosPorForma.Rectangular || [];
+    h += '<div class="bloque"><span class="lbl">Tamaño de la rectangular</span><div class="chips" data-k="tamCaj">' + (tl.length ? tl.map(function (t) {
+      return '<button type="button" class="chip" data-a="cajTam" data-v="' + esc(t) + '" aria-pressed="' + (t === c.tamano) + '">' + esc(t) + '</button>';
+    }).join('') : '<span class="nota">No hay tamaños rectangulares.</span>') + '</div><p class="nota" id="cajTamNota"></p></div>';
+    h += acc('cajTrabajo', 'Tiempo y cajitas', htmlCajTrabajo());
+    h += acc('cajRelleno', 'Relleno y cobertura', htmlCajRelleno());
+    h += '<p class="nota" id="cajRellenoAviso" style="padding:0 14px 14px;margin:0;color:var(--vino)" hidden>Ojo: no agregaste relleno ni cobertura a las cajitas.</p>';
+    return h + '</section>';
+  }
+  function htmlCajTrabajo() {
+    var c = S.caj;
+    function fm(k, t, s, v) { return '<div class="it"><div class="t"><div class="n" style="min-height:0">' + t + '</div><div class="s">' + s + '</div></div>' + stepper(k, Number(v) || 0, 0, { ancho: true, label: t }) + '</div>'; }
+    return fm('cajMinTrabajo', 'Corte y empaque', 'Minutos de trabajo', c.minTrabajo) +
+      fm('cajMinHorno', 'Horno', 'Minutos de horno (gas)', c.minHorno) +
+      fm('cajMinBat', 'Batidora', 'Minutos de batidora (luz)', c.minBat) +
+      '<div class="it"><div class="t"><div class="n" style="min-height:0">Costo por cajita</div><div class="s">Soles por cajita, con IGV</div></div>' +
+      '<div class="monto"><input class="input" type="number" inputmode="decimal" step="0.05" min="0" data-in="cajCosto" value="' + esc(c.costoCajita) + '" aria-label="Costo por cajita"></div></div>' +
+      '<p class="nota">El trabajo, el margen, el IGV y la renta se calculan igual que en la torta, sin nivel de diseño.</p>';
+  }
+  function htmlCajRelleno() {
+    var h = '';
+    S.caj.rellenos.forEach(function (r, i) {
+      var cu = CAT.ingredientes[String(r.ingrediente).trim()];
+      h += '<div class="it"><div class="t"><button type="button" class="n" data-a="cajElegirIng" data-i="' + i + '">' + (r.ingrediente ? esc(r.ingrediente) : '<span style="color:var(--tenue)">Elegir ingrediente</span>') + ICON_CHEV + '</button>' +
+        '<div class="s">' + (cu != null ? fmt(cu) + ' por g · ' : '') + '<span data-crsub="' + i + '"></span></div></div>' +
+        '<div class="monto"><input class="input" type="number" inputmode="decimal" placeholder="g" data-in="cRCant" data-i="' + i + '" value="' + esc(r.cantidad) + '" aria-label="Gramos de ' + esc(r.ingrediente || 'ingrediente') + '"></div>' +
+        '<button type="button" class="quitar" data-a="cajQuitarRelleno" data-i="' + i + '" aria-label="Quitar ingrediente">✕</button></div>';
+    });
+    h += '<button type="button" class="mas" data-a="cajAgregarRelleno">+ Agregar ingrediente</button>';
+    if (S.rellenos.some(function (x) { return x.ingrediente; })) h += '<button type="button" class="mas" data-a="cajCopiarRelleno" style="margin-top:8px">Copiar ingredientes de la torta</button>';
+    return h + '<p class="nota">Pon los gramos que lleva la rectangular completa (mismo relleno y cobertura que la torta).</p>';
+  }
+
   function htmlProductos() {
     var cats = [['todos', 'Todos', '']];
     var bc = []; GRUPOS.boc.forEach(function (b) { var c = b.categoria || 'Otro'; if (bc.indexOf(c) < 0) bc.push(c); });
@@ -372,6 +462,9 @@
       out.push({ t: 'Torta' + (pisos.length > 1 ? ' de ' + pisos.length + ' pisos' : ' ' + S.sabor.toLowerCase()), total: r.precioRedondeado,
         b1: S.cantidad + ' × ' + desc + (S.nivel ? ' · ' + S.nivel.toLowerCase() : ''), b2: fmt(r.precioUnitario) + ' c/u' });
     }
+    ((r.cajitas && r.cajitas.lineas) || []).forEach(function (l) {
+      out.push({ t: l.nombre, total: l.total, b1: l.unidades + ' porciones cortadas y empacadas', b2: '' });
+    });
     [['bocaditos', 'boc'], ['tematicos', 'tem'], ['postres', 'pos']].forEach(function (g) {
       (r[g[0]] && r[g[0]].lineas || []).forEach(function (l) {
         out.push({ t: l.nombre, total: l.total,
@@ -397,15 +490,16 @@
     return h;
   }
   function htmlNegocio() {
-    var r = calc.r, b = r.bocaditos, t = r.tematicos, po = r.postres;
+    var r = calc.r, b = r.bocaditos, t = r.tematicos, po = r.postres, cj = r.cajitas || { lineas: [], gananciaFamilia: 0 };
     var ab = !!ui.abiertos.negocio;
     var h = '<div class="negocio"><button type="button" class="acc" data-a="acc" data-v="negocio" aria-expanded="' + ab + '"><span>Para el negocio</span>' + ICON_CHEV + '</button>';
     if (!ab) return h + '</div>';
     var gT = r.soloBocaditos ? 0 : (r.gananciaFamilia || 0), gB = b.gananciaFamilia || 0, gM = t.gananciaFamilia || 0, gP = po.gananciaFamilia || 0;
-    var tot = gT + gB + gM + gP;
+    var gC = cj.gananciaFamilia || 0;
+    var tot = gT + gC + gB + gM + gP;
     function dl(a, v, cls) { return '<div class="dl' + (cls ? ' ' + cls : '') + '"><span>' + a + '</span><span>' + fmt(v) + '</span></div>'; }
     h += '<div class="fam"><div class="x"><span>Ganancia por pedido</span><strong>' + fmt(tot) + '</strong></div><small>Utilidad neta (después de renta) + mano de obra de Katherine' + (r.totalPedido > 0 ? ' · ' + Math.round(tot / r.totalPedido * 100) + ' %' : '') + '</small>' +
-      (!r.soloBocaditos ? dl('Tortas', gT) : '') + (b.lineas.length ? dl('Bocaditos', gB) : '') + (t.lineas.length ? dl('Bocaditos temáticos', gM) : '') + (po.lineas.length ? dl('Postres', gP) : '') + '</div>';
+      (!r.soloBocaditos ? dl('Tortas', gT) : '') + (cj.lineas.length ? dl('Torta en cajitas', gC) : '') + (b.lineas.length ? dl('Bocaditos', gB) : '') + (t.lineas.length ? dl('Bocaditos temáticos', gM) : '') + (po.lineas.length ? dl('Postres', gP) : '') + '</div>';
     var pct = function (a, base) { return base > 0 ? Math.round(a / base * 100) + '%' : '—'; };
     var fila = function (lbl, v, cls) { return '<div class="pc-r' + (cls ? ' ' + cls : '') + '"><span>' + lbl + '</span><span>' + v + '</span></div>'; };
     var tarjeta = function (o) {
@@ -429,6 +523,16 @@
           'La utilidad sale de: margen ' + fmt(r.margen) + ' · prima por diseño ' + fmt(r.prima) + ' · gestión de extras ' + fmt(r.margenExtras) +
           (Math.abs(red) > 0.005 ? ' · redondeo del precio ' + (red > 0 ? '' : '− ') + fmt(Math.abs(red)) : '') + '.' });
     }
+    if (cj.lineas.length) {
+      var hrsC = (cj.minutos || 0) / 60;
+      var redC = (cj.utilidadNeta || 0) + (cj.renta || 0) - (cj.margen || 0) - (cj.margenExtras || 0);
+      h += tarjeta({ titulo: 'Torta en cajitas', precio: cj.total, sub: cj.n + ' porciones · ' + cj.sabor + ' · rectangular ' + cj.tamano,
+        filas: [['IGV 18% (va a SUNAT)', cj.igv], ['Insumos (keke + relleno)', cj.insumos], ['Cajitas (sin IGV)', cj.empaque],
+          ['Gastos fijos + gas y luz', cj.costosFijos], ['Mano de obra de Katherine (' + (cj.minutos || 0) + ' min)', cj.manoObra], ['Renta RER 1.5%', cj.renta]],
+        neta: cj.utilidadNeta, fam: cj.gananciaFamilia,
+        extra: (hrsC > 0 ? '<b>' + fmt(cj.gananciaFamilia / hrsC) + ' por hora</b> de trabajo de Katherine. ' : '') +
+          'La utilidad sale de: margen ' + fmt(cj.margen) + ' · gestión de cajitas ' + fmt(cj.margenExtras) + (Math.abs(redC) > 0.005 ? ' · redondeo del precio ' + (redC > 0 ? '' : '− ') + fmt(Math.abs(redC)) : '') + '.' });
+    }
     var bocT = function (titulo, x, pc) {
       return tarjeta({ titulo: titulo, precio: x.total, sub: x.lineas.map(function (l) { return l.nombre + ' ' + l.unidades + ' u.'; }).join(' · '),
         filas: [['IGV 18% (va a SUNAT)', x.igv], [pc[1] ? pc[0] + ' (' + pc[1] + '% sin IGV)' : pc[0], x.costo], [pc[2] ? 'Mano de obra (' + pc[2] + '% sin IGV)' : 'Mano de obra de Katherine', x.manoObra], ['Renta RER 1.5%', x.renta]],
@@ -451,6 +555,7 @@
       else t += S.sabor + ' - ' + S.forma + ' ' + S.tamano + ': ';
       t += fmt(r.precioRedondeado) + (S.cantidad > 1 ? ' (' + fmt(r.precioUnitario) + ' c/u)' : '') + '\n';
     }
+    ((r.cajitas && r.cajitas.lineas) || []).forEach(function (l) { t += l.nombre + ' (' + l.unidades + ' porciones): ' + fmt(l.total) + '\n'; });
     [].concat(r.bocaditos.lineas, r.tematicos.lineas, r.postres.lineas).forEach(function (l) { t += l.nombre + ' (' + l.unidades + ' u.): ' + fmt(l.total) + '\n'; });
     return t + 'Total: ' + fmt(r.totalPedido) + ' (IGV incluido)';
   }
@@ -514,6 +619,7 @@
   function descripcionH(h) {
     var p = [];
     if (!h.solo) p.push((h.cantidad > 1 ? h.cantidad + ' tortas ' : 'Torta ') + [h.sabor, [h.forma, h.tamano].join(' ').trim()].filter(Boolean).join(' · '));
+    lineasH(h.cajDet).forEach(function (l) { p.push(l.nombre + ' ' + l.unidades + ' porciones'); });
     lineasH(h.bocDet).concat(lineasH(h.temDet), lineasH(h.posDet)).forEach(function (l) { p.push(l.nombre + ' ' + l.unidades + ' u.'); });
     return p.join(' · ');
   }
@@ -531,7 +637,7 @@
       if (ui.hmes && h.mes !== ui.hmes) return false;
       if (!ui.hpruebas && /prueba/i.test(h.cliente)) return false;
       if (!q) return true;
-      return norm([h.cliente, h.sabor, h.forma, h.tamano, h.bocDet, h.temDet, h.posDet, h.fecha].join(' ')).indexOf(q) >= 0;
+      return norm([h.cliente, h.sabor, h.forma, h.tamano, h.bocDet, h.temDet, h.posDet, h.cajDet, h.fecha].join(' ')).indexOf(q) >= 0;
     });
   }
   function renderHistorial() {
@@ -571,9 +677,9 @@
       if (h.relleno) d += f('Relleno y cobertura', esc(h.relleno));
       if (h.gastos) d += f('Extras', esc(h.gastos));
     }
-    [['Bocaditos', h.bocDet], ['Bocaditos temáticos', h.temDet], ['Postres', h.posDet]].forEach(function (x) {
+    [['Torta en cajitas', h.cajDet, true], ['Bocaditos', h.bocDet], ['Bocaditos temáticos', h.temDet], ['Postres', h.posDet]].forEach(function (x) {
       var ls = lineasH(x[1]); if (!ls.length) return;
-      d += '<div class="pc-cap">' + x[0] + '</div>' + ls.map(function (l) { return f(esc(l.nombre) + ' · ' + l.unidades + ' u.', fmt(l.total)); }).join('');
+      d += '<div class="pc-cap">' + x[0] + '</div>' + ls.map(function (l) { return f(esc(l.nombre) + ' · ' + l.unidades + (x[2] ? ' porciones' : ' u.'), fmt(l.total)); }).join('');
     });
     d += f('Total del pedido (IGV incluido)', fmt(h.total), 'tot2');
     if (h.fam > 0) d += '<div class="pc-fam"><span>Ganancia por pedido</span><b>' + fmt(h.fam) + (h.total > 0 ? ' · ' + Math.round(h.fam / h.total * 100) + '%' : '') + '</b></div>';
@@ -603,6 +709,11 @@
       }
     }
     p.bocaditos = lineasH(h.bocDet).map(function (l) { var b = PROD[l.nombre]; return { nombre: l.nombre, paquetes: b ? Math.max(1, Math.round(l.unidades / b.b.unidades)) : 1 }; });
+    var cj0 = lineasH(h.cajDet)[0];
+    if (cj0) {
+      p.cajitas = { on: true, n: cj0.unidades, sabor: String(cj0.nombre).replace(/^Torta en cajitas · /, '') };
+      avisos.push('Revisa las cajitas: de esa cotización solo quedaron las porciones y el sabor (tamaño, minutos y relleno no).');
+    }
     p.tematicos = lineasH(h.temDet).map(function (l) { return { nombre: l.nombre, paquetes: l.unidades }; });
     p.postres = lineasH(h.posDet).map(function (l) { return { nombre: l.nombre, paquetes: l.unidades }; });
     return p;
@@ -634,6 +745,18 @@
         return { ingrediente: r.ingrediente, cantidad: r.cantidad };
       });
       n.extras = (p.gastosExtra || []).filter(function (g) { return g.concepto; }).map(function (g) { return { concepto: g.concepto, costo: g.costo }; });
+    }
+    if (p.cajitas && p.cajitas.on) {
+      var pc = p.cajitas, tl2 = I.tamanosPorForma.Rectangular || [];
+      n.caj.on = true;
+      n.caj.n = Math.max(1, Math.round(Number(pc.n) || 25));
+      n.caj.sabor = ok(I.sabores, pc.sabor, 'El sabor de las cajitas') ? pc.sabor : (I.sabores[0] || '');
+      if (ok(tl2, pc.tamano, 'El tamaño de la rectangular')) { n.caj.tamano = pc.tamano; n.caj.tamManual = true; } else { n.caj.tamManual = false; cajAuto(n.caj); }
+      ['minTrabajo', 'minHorno', 'minBat', 'costoCajita'].forEach(function (k) { if (pc[k] !== undefined && pc[k] !== null && pc[k] !== '') n.caj[k] = Number(pc[k]) || 0; });
+      n.caj.rellenos = (pc.rellenos || []).filter(function (r) { return r.ingrediente; }).map(function (r) {
+        if (CAT.ingredientes[String(r.ingrediente).trim()] === undefined) avisos.push('El ingrediente "' + r.ingrediente + '" (cajitas) ya no está en la lista: elígelo de nuevo.');
+        return { ingrediente: r.ingrediente, cantidad: r.cantidad };
+      });
     }
     n.items = {};
     [].concat(p.bocaditos || [], p.tematicos || [], p.postres || []).forEach(function (x) {
@@ -709,6 +832,23 @@
       case 'tamano': (i < 0 ? S : S.pisos[i]).tamano = v; cambio(true); break;
       case 'nivel': S.nivel = v; cambio(true); break;
       case 'acc': ui.abiertos[v] = !ui.abiertos[v]; render(); break;
+      case 'cajOn':
+        S.caj.on = !S.caj.on;
+        if (S.caj.on) {
+          if (!S.caj.sabor || CAT.init.sabores.indexOf(S.caj.sabor) < 0) S.caj.sabor = S.sabor || CAT.init.sabores[0] || '';
+          if (!S.caj.tamano) { S.caj.tamManual = false; cajAuto(); }
+        }
+        cambio(true); break;
+      case 'cajSabor':
+        abrirHoja('Sabor de las cajitas', CAT.init.sabores.map(function (s) { return { v: s, label: s }; }), S.caj.sabor, function (val) { S.caj.sabor = val; cambio(true); }); break;
+      case 'cajTam': S.caj.tamano = v; S.caj.tamManual = true; cambio(true); break;
+      case 'cajAgregarRelleno': S.caj.rellenos.push({ ingrediente: '', cantidad: '' }); cambio(true); elegirIngCaj(S.caj.rellenos.length - 1); break;
+      case 'cajElegirIng': elegirIngCaj(i); break;
+      case 'cajQuitarRelleno': S.caj.rellenos.splice(i, 1); cambio(true); break;
+      case 'cajCopiarRelleno':
+        S.caj.rellenos = S.rellenos.filter(function (x) { return x.ingrediente; }).map(function (x) { return { ingrediente: x.ingrediente, cantidad: x.cantidad }; });
+        ui.abiertos.cajRelleno = true; cambio(true);
+        toast('Ingredientes copiados: ajusta los gramos a la rectangular'); break;
       case 'agregarPiso': {
         var f0 = CAT.init.formas[0];
         S.pisos.push({ sabor: S.sabor, forma: S.forma || f0, tamano: (CAT.init.tamanosPorForma[S.forma || f0] || [])[0] || '' });
@@ -752,6 +892,8 @@
 
   function mover(a, d, btn) {
     if (a === 'cantidad') { S.cantidad = Math.max(1, (S.cantidad || 1) + d); cambio(true); return; }
+    if (a === 'cajN') { S.caj.n = Math.max(1, (Number(S.caj.n) || 0) + d * 5); cajAuto(); cambio(true); return; }
+    if (CAJMIN[a]) { var kc = CAJMIN[a]; S.caj[kc] = Math.max(0, (Number(S.caj[kc]) || 0) + d * 5); cambio(false); actualizarInput(a, S.caj[kc]); return; }
     if (/^min/.test(a)) { S[a] = Math.max(0, (Number(S[a]) || 0) + d * 5); cambio(false); actualizarInput(a, S[a]); return; }
     if (a.indexOf('item:') === 0) {
       var n = a.slice(5); var q = Math.max(0, (S.items[n] || 0) + d);
@@ -772,6 +914,10 @@
     var ops = Object.keys(CAT.ingredientes).sort(function (a, b) { return a.localeCompare(b); }).map(function (n) { return { v: n, label: n, sub: fmt(CAT.ingredientes[n]) + '/g' }; });
     abrirHoja('Ingrediente', ops, S.rellenos[i].ingrediente, function (val) { S.rellenos[i].ingrediente = val; cambio(true); focoUltimoIdx('rCant', i); }, true);
   }
+  function elegirIngCaj(i) {
+    var ops = Object.keys(CAT.ingredientes).sort(function (a, b) { return a.localeCompare(b); }).map(function (n) { return { v: n, label: n, sub: fmt(CAT.ingredientes[n]) + '/g' }; });
+    abrirHoja('Ingrediente', ops, S.caj.rellenos[i].ingrediente, function (val) { S.caj.rellenos[i].ingrediente = val; cambio(true); focoUltimoIdx('cRCant', i); }, true);
+  }
   function focoUltimoIdx(k, i) { setTimeout(function () { var el = document.querySelector('[data-in="' + k + '"][data-i="' + i + '"]'); if (el && !el.value) el.focus(); }, 30); }
   function elegirEmp(tipo, i) {
     var etiqueta = tipo === 'Caja' ? 'Caja de torta' : 'Base';
@@ -790,6 +936,10 @@
     if (k === 'q') { ui.q = el.value; $('prodLista').innerHTML = htmlListaProductos(); return; }
     if (k === 'hq') { ui.hq = el.value; ui.hn = 30; $('histLista').innerHTML = htmlListaH(); return; }
     if (k === 'rCant') { S.rellenos[i].cantidad = el.value; cambio(false); return; }
+    if (k === 'cRCant') { S.caj.rellenos[i].cantidad = el.value; cambio(false); return; }
+    if (k === 'cajCosto') { S.caj.costoCajita = el.value; cambio(false); return; }
+    if (k === 'cajN') { var nc = Math.round(Number(el.value)); if (nc >= 1) { S.caj.n = nc; cajAuto(); cambio(false); } return; }
+    if (CAJMIN[k]) { if (el.value !== '' && Number(el.value) >= 0) { S.caj[CAJMIN[k]] = Number(el.value); cambio(false); } return; }
     if (k === 'gCosto') { S.extras[i].costo = el.value; cambio(false); return; }
     if (k === 'gConcepto') {
       S.extras[i].concepto = el.value;
@@ -802,7 +952,7 @@
   });
   document.addEventListener('change', function (e) {
     var el = e.target, k = el.getAttribute('data-in'); if (!k) return;
-    if (k === 'cantidad' || /^min/.test(k) || k.indexOf('item:') === 0) {
+    if (k === 'cantidad' || k === 'cajN' || CAJMIN[k] || /^min/.test(k) || k.indexOf('item:') === 0) {
       if (el.value === '' || Number(el.value) < Number(el.getAttribute('min'))) { render(); return; }
       render();
     }
@@ -873,6 +1023,7 @@
       d.relleno = unicos(S.rellenos.filter(function (x) { return x.ingrediente && Number(x.cantidad) > 0; }).map(function (x) { return x.ingrediente; })).join(', ');
       d.precioTorta = (r.precioRedondeado || 0).toFixed(2);
     }
+    ((r.cajitas && r.cajitas.lineas) || []).forEach(function (l) { d.bocas.push({ n: 'Porciones de torta · ' + String(l.nombre).replace(/^Torta en cajitas · /, ''), c: String(l.unidades), p: l.total.toFixed(2), g: 'caj' }); });
     [['bocaditos', 'boc'], ['tematicos', 'tem'], ['postres', 'pos']].forEach(function (g) {
       ((r[g[0]] && r[g[0]].lineas) || []).forEach(function (l) { d.bocas.push({ n: l.nombre, c: String(l.unidades), p: l.total.toFixed(2), g: g[1] }); });
     });
@@ -889,6 +1040,7 @@
       d.relleno = unicos(String(h.relleno || '').split('; ').map(function (s) { var m = s.trim().match(/^(.*) \(([\d.]+)g\)/); return m ? m[1] : ''; })).join(', ');
       d.precioTorta = (Number(h.precioTorta) || 0).toFixed(2);
     }
+    lineasH(h.cajDet).forEach(function (l) { d.bocas.push({ n: 'Porciones de torta · ' + String(l.nombre).replace(/^Torta en cajitas · /, ''), c: String(l.unidades), p: l.total.toFixed(2), g: 'caj' }); });
     [['bocDet', 'boc'], ['temDet', 'tem'], ['posDet', 'pos']].forEach(function (g) {
       lineasH(h[g[0]]).forEach(function (l) { d.bocas.push({ n: l.nombre, c: String(l.unidades), p: l.total.toFixed(2), g: g[1] }); });
     });
@@ -953,6 +1105,7 @@
     prepararCatalogo();
     S = leer(LS.borrador, null);
     if (!S || !S.id || !S.items) S = nuevaCotizacion();
+    if (!S.caj) S.caj = nuevaCaj();
     if (S.estado === 'guardando') S.estado = COLA.some(function (x) { return x.id === S.id; }) ? 'pendiente' : 'guardada';
     recalcular(); aplicarRuta();
     enviarCola();

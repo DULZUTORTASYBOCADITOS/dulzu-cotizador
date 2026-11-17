@@ -4,6 +4,8 @@
      1) Cantidad de tortas iguales: solo el costo de receta se multiplica por la cantidad;
         relleno, extras y todos los minutos (incluidos los del nivel de diseño) son del pedido completo.
      2) El precio de la torta se redondea al sol entero más cercano.
+   + 17/11/2026: "Torta en cajitas": una rectangular sin decoración (mismo sabor, relleno y cobertura) cortada y empacada
+     en cajitas. Se cobra solo el total (nunca por porción).
    Este archivo no lee ni escribe Google Sheets: recibe el catálogo ya descargado (CAT). */
 var DZCalc = (function () {
   'use strict';
@@ -168,6 +170,64 @@ var DZCalc = (function () {
   }
 
   /**
+   * Torta en cajitas (17/11/2026): rectangular sin decoración, cortada y empacada en cajitas.
+   * Mismas reglas que la torta (mano de obra por hora, gastos fijos, energía, margen, IGV, renta, redondeo al sol)
+   * pero sin nivel de diseño ni prima, y con el costo de las cajitas como "extra" (margen de gestión de extras).
+   * El resultado trae una sola línea con el total: el precio por porción no se muestra ni se guarda.
+   */
+  function cajitas(CAT, c) {
+    var vacio = { lineas: [], total: 0, sinIGV: 0, igv: 0, costo: 0, manoObra: 0, utilidad: 0, renta: 0, utilidadNeta: 0, gananciaFamilia: 0, ok: true, error: null };
+    var n = Math.max(0, Math.round(Number(c && c.n) || 0));
+    if (!c || !c.on || n <= 0) return vacio;
+    var P = CAT.P;
+    var rr = costoReceta(CAT, c.sabor, 'Rectangular', c.tamano);
+    var totalRelleno = 0;
+    var rellenoDetalle = [];
+    (c.rellenos || []).filter(function (r) { return r.ingrediente && Number(r.cantidad) > 0; }).forEach(function (r) {
+      var costoUnit = CAT.ingredientes[String(r.ingrediente).trim()] || 0;
+      var g = Number(r.cantidad) || 0;
+      totalRelleno += costoUnit * g;
+      rellenoDetalle.push(r.ingrediente + ' (' + g + 'g): S/' + (costoUnit * g).toFixed(2));
+    });
+    var minutos = Number(c.minTrabajo) || 0;
+    var minHorno = Number(c.minHorno) || 0;
+    var minBat = Number(c.minBat) || 0;
+    var costoCajita = Number(c.costoCajita) || 0;
+    var r1 = Number(rr.costo) || 0;
+    var r3 = r1 + totalRelleno;
+    var r7 = minutos / 60 * P.tarifa;
+    var energia = minHorno / 60 * P.hornoHora + minBat / 60 * P.batHora;
+    var gastosFijos = minutos / 60 * P.gfHora;
+    var r4 = gastosFijos + energia;
+    var r5 = (r3 + r7) * (1 + P.merma) + r4;
+    var r6 = r5 / (1 - P.margen) - r5;
+    var r8 = r5 + r6;
+    var empaqueNeto = (n * costoCajita) / (P.factura ? 1 + P.igv : 1);
+    var r9 = empaqueNeto / (1 - P.margenExtras);
+    var r10 = r8 + r9;
+    var precioConIGV = r10 * (1 + P.igv);
+    var precio = Math.round(Math.round(precioConIGV * 100) / 100);
+    var valorVentaFinal = precio / (1 + P.igv);
+    var igvFinal = precio - valorVentaFinal;
+    var costoTotal = r5 + empaqueNeto;
+    var utilidadAntesRenta = valorVentaFinal - costoTotal;
+    var renta = valorVentaFinal * P.renta;
+    var utilidadNeta = utilidadAntesRenta - renta;
+    var gananciaFamilia = utilidadNeta + r7;
+    var nombre = 'Torta en cajitas · ' + (c.sabor || '');
+    return {
+      ok: rr.ok, error: rr.ok ? null : rr.error,
+      n: n, sabor: c.sabor, tamano: c.tamano, minutos: minutos, rellenoDetalle: rellenoDetalle,
+      lineas: [{ nombre: nombre, detalle: '', paquetes: 1, unidades: n, precioPaquete: precio, total: precio,
+        sinIGV: valorVentaFinal, costo: costoTotal, manoObra: r7, utilidad: utilidadAntesRenta, caj: true }],
+      total: precio, sinIGV: valorVentaFinal, igv: igvFinal, costo: costoTotal, manoObra: r7, utilidad: utilidadAntesRenta,
+      renta: renta, utilidadNeta: utilidadNeta, gananciaFamilia: gananciaFamilia,
+      insumos: r3, costoReceta: r1, relleno: totalRelleno, empaque: empaqueNeto, costosFijos: r4,
+      margen: r6, margenExtras: r9 - empaqueNeto
+    };
+  }
+
+  /**
    * Igual que cotizarPedido del servidor, sin guardar.
    * Devuelve { r, payload (copia modificada como en el servidor), datos (JSON del formulario), hist }.
    * El formulario original (payloadIn) no se toca.
@@ -178,10 +238,11 @@ var DZCalc = (function () {
     var b = bocaditos(CAT, payload.bocaditos, P);
     var t = bocaditos(CAT, payload.tematicos, P);
     var po = bocaditos(CAT, payload.postres, P);
+    var cj = cajitas(CAT, payload.cajitas);
     var datos = JSON.stringify(payload);
     var solo = !!payload.soloBocaditos;
-    if (solo && !b.lineas.length && !t.lineas.length && !po.lineas.length) {
-      return { r: { ok: false, soloBocaditos: true, error: 'Elige al menos un bocadito o postre.', bocaditos: b, tematicos: t, postres: po, totalPedido: 0, gananciaFamiliaTotal: 0 },
+    if (solo && !b.lineas.length && !t.lineas.length && !po.lineas.length && !cj.lineas.length) {
+      return { r: { ok: false, soloBocaditos: true, error: 'Elige al menos un bocadito, postre o la torta en cajitas.', bocaditos: b, tematicos: t, postres: po, cajitas: cj, totalPedido: 0, gananciaFamiliaTotal: 0 },
         payload: payload, datos: datos, hist: null, vacio: true };
     }
     var hist = null;
@@ -197,11 +258,12 @@ var DZCalc = (function () {
     r.bocaditos = b;
     r.tematicos = t;
     r.postres = po;
-    r.totalPedido = (r.precioRedondeado || 0) + b.total + t.total + po.total;
-    r.gananciaFamiliaTotal = (r.gananciaFamilia || 0) + b.gananciaFamilia + t.gananciaFamilia + po.gananciaFamilia;
+    r.cajitas = cj;
+    r.totalPedido = (r.precioRedondeado || 0) + b.total + t.total + po.total + cj.total;
+    r.gananciaFamiliaTotal = (r.gananciaFamilia || 0) + b.gananciaFamilia + t.gananciaFamilia + po.gananciaFamilia + cj.gananciaFamilia;
     return { r: r, payload: payload, datos: datos, hist: hist };
   }
 
-  return { costoReceta: costoReceta, torta: torta, bocaditos: bocaditos, cotizar: cotizar };
+  return { costoReceta: costoReceta, torta: torta, bocaditos: bocaditos, cajitas: cajitas, cotizar: cotizar };
 })();
 if (typeof module !== 'undefined') module.exports = DZCalc;
