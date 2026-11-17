@@ -86,8 +86,8 @@ main{padding:4px 16px 0}
 @media (hover:hover) and (pointer:fine){.chips{flex-wrap:wrap;overflow-x:visible;margin:0;padding-left:0;padding-right:0}}
 .chips.packs{flex-wrap:wrap;overflow-x:visible;margin:0;padding:2px 0}
 .pkg{display:inline-flex;align-items:center;gap:4px}
-.pkm{width:34px;height:40px;border-radius:999px;border:1px solid var(--linea);background:var(--blanco);font-size:18px;line-height:1;cursor:pointer;color:var(--vino)}
-.pkm:disabled{opacity:.35;cursor:default}
+.pkm{flex:none;width:40px;height:40px;border-radius:999px;border:2px solid var(--vino);background:var(--rosa-suave);font-size:24px;font-weight:700;line-height:1;cursor:pointer;color:var(--vino);display:inline-flex;align-items:center;justify-content:center;padding:0}
+.pkm:disabled{opacity:.5;cursor:default;border-color:var(--linea);color:var(--camel)}
 .pkn{min-width:20px;text-align:center;font-weight:600;color:var(--vino);font-size:13px}
 .chip{flex:none;height:40px;padding:0 15px;border-radius:999px;border:1px solid var(--linea);background:var(--blanco);display:inline-flex;align-items:center;gap:7px;font-weight:500;font-size:15px;white-space:nowrap}
 .chip[aria-pressed=true]{background:var(--vino);border-color:var(--vino);color:#fff}
@@ -289,7 +289,7 @@ main{padding:4px 16px 0}
     <button class="btn" id="barraBtn">Ver resumen</button>
   </div>
 </div>
-<script src="calc.js"></script>
-<script src="app.js"></script>
+<script src="calc.js?v=20261117b"></script>
+<script src="app.js?v=20261117b"></script>
 </body>
 </html>
