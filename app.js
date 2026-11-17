@@ -341,12 +341,13 @@
   }
   // ---------- Cobertura y relleno automáticos (17/11/2026) ----------
   // Base: torta circular 20 cm x 15 cm de alto = 1.5 recetas de butternache y 360 g de manjar (2 rellenos).
-  // Cobertura escala con la superficie a cubrir (arriba + lados); relleno con el área de la base. Se suma cada piso y la cantidad de tortas.
+  // Cobertura escala solo con los lados (perímetro x alto, sin la base de arriba); relleno con el área de la base. Rectangular: manual. Se suma cada piso y la cantidad de tortas.
   var AUTO = { alto: 15, recetasBase: 1.5, rellenoBase: 360, ing: 'Manjar blanco',
     cob: [['Mantequilla', 180], ['Chantilly', 250], ['Chocolate blanco', 1000]] };
-  var SUP_BASE = Math.PI * 100 + Math.PI * 20 * 15, AREA_BASE = Math.PI * 100;
+  var SUP_BASE = Math.PI * 20 * 15, AREA_BASE = Math.PI * 100;
   function medidaPiso(forma, tamano) {
     var n = String(tamano || '').match(/[\d.]+/g); if (!n) return null;
+    if (forma === 'Rectangular') return null;
     if (forma === 'Circular') { var d = Number(n[0]); return { area: Math.PI * d * d / 4, perim: Math.PI * d }; }
     var a = Number(n[0]), b = Number(n[1] || n[0]); return { area: a * b, perim: 2 * (a + b) };
   }
@@ -354,7 +355,7 @@
     var sup = 0, area = 0, ok = true;
     [{ forma: S.forma, tamano: S.tamano }].concat(S.pisos).forEach(function (p) {
       var m = medidaPiso(p.forma, p.tamano); if (!m) { ok = false; return; }
-      sup += m.area + m.perim * AUTO.alto; area += m.area;
+      sup += m.perim * AUTO.alto; area += m.area;
     });
     var c = Math.max(1, Math.round(Number(S.cantidad) || 1));
     return ok ? { recetas: AUTO.recetasBase * sup / SUP_BASE * c, relleno: AUTO.rellenoBase * area / AREA_BASE * c } : null;
@@ -373,7 +374,9 @@
   }
   function ponerAuto(tipo) {
     var f = autoFactores(); if (!f) { toast('No pude leer el tamaño de la torta'); return; }
+    var habia = S.rellenos.some(function (r) { return r.auto === tipo; });
     S.rellenos = S.rellenos.filter(function (r) { return r.auto !== tipo && (r.ingrediente || Number(r.cantidad) > 0); });
+    if (habia) { cambio(true); toast(tipo === 'cob' ? 'Cobertura automática quitada' : 'Relleno automático quitado'); return; }
     if (tipo === 'cob') AUTO.cob.forEach(function (x) { S.rellenos.push({ ingrediente: x[0], cantidad: '', auto: 'cob', base: x[1] }); });
     else S.rellenos.push({ ingrediente: AUTO.ing, cantidad: '', auto: 'rel' });
     ui.abiertos.relleno = true; cambio(true);
@@ -381,7 +384,7 @@
   function htmlAuto() {
     var f = autoFactores(); if (!f) return '';
     var tieneC = S.rellenos.some(function (r) { return r.auto === 'cob'; }), tieneR = S.rellenos.some(function (r) { return r.auto === 'rel'; });
-    return '<div class="chips packs" style="margin-bottom:10px">' +
+    return '<p class="nota" style="margin:0 0 6px">Opcional: toca para agregar o quitar.</p><div class="chips packs" style="margin-bottom:10px">' +
       '<button type="button" class="chip" data-a="autoCob" aria-pressed="' + tieneC + '">Cobertura butternache · ' + (Math.round(f.recetas * 100) / 100) + ' recetas</button>' +
       '<button type="button" class="chip" data-a="autoRel" aria-pressed="' + tieneR + '">Relleno (2 capas) · ' + red5(f.relleno) + ' g</button></div>';
   }
@@ -395,7 +398,7 @@
         '<button type="button" class="quitar" data-a="quitarRelleno" data-i="' + i + '" aria-label="Quitar ingrediente">✕</button></div>';
     });
     return h + '<button type="button" class="mas" data-a="agregarRelleno">+ Agregar ingrediente</button>' +
-      '<p class="nota">Los botones calculan los gramos según el tamaño, los pisos y la cantidad de tortas (base: circular 20 cm × 15 cm de alto = 1.5 recetas de butternache y 360 g de relleno). Se recalculan solos si cambias el tamaño; si escribes los gramos a mano, quedan fijos. Toca el nombre para cambiar el ingrediente del relleno.</p>';
+      (autoFactores() ? '<p class="nota">Los botones son opcionales (para otras coberturas o rellenos agrégalos a mano). Calculan los gramos según el tamaño, los pisos y la cantidad de tortas: cobertura por los lados de la torta (base: circular 20 cm × 15 cm = 1.5 recetas de butternache) y relleno por el área (360 g en 20 cm, 2 capas). Se recalculan solos si cambias el tamaño; si escribes los gramos a mano, quedan fijos.</p>' : (S.forma === 'Rectangular' || S.pisos.some(function (x) { return x.forma === 'Rectangular'; }) ? '<p class="nota">Rectangular: cobertura y relleno a mano.</p>' : ''));
   }
   function htmlExtras() {
     var h = '';
