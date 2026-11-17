@@ -432,12 +432,18 @@
     Object.keys(pk.c).forEach(function (k) { var b = productoTem(k); if (b) out.push({ b: b, n: pk.c[k] }); else falta.push(k); });
     return { lineas: out, falta: falta, uds: out.reduce(function (a, x) { return a + x.n; }, 0), total: out.reduce(function (a, x) { return a + x.n * x.b.precio; }, 0) };
   }
+  function ajustePacks() {
+    var t = 0; (S.packsTem || []).forEach(function (c, i) { if (c > 0) { var r = packTemLineas(PACKS_TEM[i]); t += c * (r.total - Math.floor(r.total + 1e-9)); } });
+    return Math.round(t * 100) / 100;
+  }
   function htmlPacksTem() {
     if (!GRUPOS.tem.length || !(ui.cat === 'todos' || ui.cat === 'tem') || ui.q) return '';
-    return '<div class="bloque" style="margin:0 0 10px"><span class="lbl">Packs de temáticos (suma de una vez)</span><div class="chips" data-k="packsTem">' +
+    return '<div class="bloque" style="margin:0 0 10px"><span class="lbl">Packs de temáticos (suma de una vez)</span><div class="chips packs" data-k="packsTem">' +
       PACKS_TEM.map(function (pk, i) {
         var r = packTemLineas(pk);
-        return '<button type="button" class="chip" data-a="packTem" data-v="' + i + '" aria-pressed="false">' + esc(pk.n) + ' · ' + r.uds + ' · ' + fmt0(r.total) + '</button>';
+        var c = (S.packsTem || [])[i] || 0;
+        return '<span class="pkg"><button type="button" class="pkm" data-a="packTemMenos" data-v="' + i + '" aria-label="Quitar un pack ' + esc(pk.n) + '"' + (c ? '' : ' disabled') + '>−</button>' +
+          '<button type="button" class="chip" data-a="packTem" data-v="' + i + '" aria-pressed="' + (c > 0) + '">' + esc(pk.n) + ' · ' + r.uds + ' · ' + fmt0(Math.floor(r.total + 1e-9)) + (c ? ' <span class="pkn">×' + c + '</span>' : '') + '</button></span>';
       }).join('') + '</div></div>';
   }
 
@@ -898,12 +904,19 @@
         var pk = PACKS_TEM[Number(v)], rp = packTemLineas(pk);
         if (!rp.lineas.length) { toast('No encontré esos temáticos en la carta'); break; }
         var antes = copia(S.items);
-        var antesAj = S.ajusteTem || 0;
+        var antesAj = S.ajusteTem || 0, antesPk = (S.packsTem || []).slice();
         rp.lineas.forEach(function (x) { S.items[x.b.nombre] = (S.items[x.b.nombre] || 0) + x.n; });
-        S.ajusteTem = Math.round(((S.ajusteTem || 0) + (rp.total - Math.floor(rp.total + 1e-9))) * 100) / 100;
+        S.packsTem = [0, 0, 0, 0].map(function (z, j) { return antesPk[j] || 0; }); S.packsTem[Number(v)]++;
+        S.ajusteTem = ajustePacks();
         cambio(true);
-        toast('Pack ' + pk.n + ' agregado · ' + rp.uds + ' temáticos · ' + fmt0(Math.floor(rp.total + 1e-9)) + (rp.falta.length ? ' (faltan: ' + rp.falta.join(', ') + ')' : ''), 3600, { txt: 'Deshacer', fn: function () { S.items = antes; S.ajusteTem = antesAj; cambio(true); } });
+        toast('Pack ' + pk.n + ' agregado · ' + rp.uds + ' temáticos · ' + fmt0(Math.floor(rp.total + 1e-9)) + (rp.falta.length ? ' (faltan: ' + rp.falta.join(', ') + ')' : ''), 3600, { txt: 'Deshacer', fn: function () { S.items = antes; S.ajusteTem = antesAj; S.packsTem = antesPk; cambio(true); } });
         break; }
+      case 'packTemMenos': {
+        var pm = PACKS_TEM[Number(v)], rm = packTemLineas(pm), cm = (S.packsTem || [])[Number(v)] || 0;
+        if (!cm) break;
+        rm.lineas.forEach(function (x) { var q = (S.items[x.b.nombre] || 0) - x.n; if (q > 0) S.items[x.b.nombre] = q; else delete S.items[x.b.nombre]; });
+        S.packsTem[Number(v)] = cm - 1; S.ajusteTem = ajustePacks();
+        cambio(true); toast('Pack ' + pm.n + ' quitado'); break; }
       case 'agregarItem': {
         S.items[v] = 1; cambio(true);
         var pr = PROD[v];
@@ -936,7 +949,7 @@
     if (CAJMIN[a]) { var kc = CAJMIN[a]; S.caj[kc] = Math.max(0, (Number(S.caj[kc]) || 0) + d * 5); cambio(false); actualizarInput(a, S.caj[kc]); return; }
     if (/^min/.test(a)) { S[a] = Math.max(0, (Number(S[a]) || 0) + d * 5); cambio(false); actualizarInput(a, S[a]); return; }
     if (a.indexOf('item:') === 0) {
-      var n = a.slice(5); var q = Math.max(0, (S.items[n] || 0) + d); S.ajusteTem = 0;
+      var n = a.slice(5); var q = Math.max(0, (S.items[n] || 0) + d); S.ajusteTem = 0; S.packsTem = [0, 0, 0, 0];
       if (q === 0) { delete S.items[n]; cambio(true); toast(n + ' quitado', 2600, { txt: 'Deshacer', fn: function () { S.items[n] = 1; cambio(true); } }); return; }
       S.items[n] = q; cambio(false); actualizarInput(a, q); return;
     }
@@ -988,7 +1001,7 @@
       cambio(false); return; }
     if (k === 'cantidad') { var c = Math.round(Number(el.value)); if (c >= 1) { S.cantidad = c; cambio(false); } return; }
     if (/^min/.test(k)) { if (el.value !== '' && Number(el.value) >= 0) { S[k] = Number(el.value); cambio(false); } return; }
-    if (k.indexOf('item:') === 0) { var q = Math.round(Number(el.value)); if (q >= 1) { S.items[k.slice(5)] = q; S.ajusteTem = 0; cambio(false); } return; }
+    if (k.indexOf('item:') === 0) { var q = Math.round(Number(el.value)); if (q >= 1) { S.items[k.slice(5)] = q; S.ajusteTem = 0; S.packsTem = [0, 0, 0, 0]; cambio(false); } return; }
   });
   document.addEventListener('change', function (e) {
     var el = e.target, k = el.getAttribute('data-in'); if (!k) return;
