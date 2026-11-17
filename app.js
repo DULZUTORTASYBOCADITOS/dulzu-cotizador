@@ -341,13 +341,13 @@
   }
   // ---------- Cobertura y relleno automáticos (17/11/2026) ----------
   // Base: torta circular 20 cm x 15 cm de alto = 1.5 recetas de butternache y 360 g de manjar (2 rellenos).
-  // Cobertura escala con lados + parte de arriba (sin la base de abajo); relleno con el área de la base. Rectangular: manual. Se suma cada piso y la cantidad de tortas.
+  // Cobertura escala con lados + parte de arriba (sin la base de abajo); relleno con el área de la base. Rectangular y cuadrado: manual. Se suma cada piso y la cantidad de tortas.
   var AUTO = { alto: 15, recetasBase: 1.5, rellenoBase: 360, ing: 'Manjar blanco',
     cob: [['Mantequilla', 180], ['Chantilly', 250], ['Chocolate blanco', 1000]] };
   var SUP_BASE = Math.PI * 100 + Math.PI * 20 * 15, AREA_BASE = Math.PI * 100;
   function medidaPiso(forma, tamano) {
     var n = String(tamano || '').match(/[\d.]+/g); if (!n) return null;
-    if (forma === 'Rectangular') return null;
+    if (forma !== 'Circular') return null; // rectangular y cuadrado: manual
     if (forma === 'Circular') { var d = Number(n[0]); return { area: Math.PI * d * d / 4, perim: Math.PI * d }; }
     var a = Number(n[0]), b = Number(n[1] || n[0]); return { area: a * b, perim: 2 * (a + b) };
   }
@@ -398,7 +398,7 @@
         '<button type="button" class="quitar" data-a="quitarRelleno" data-i="' + i + '" aria-label="Quitar ingrediente">✕</button></div>';
     });
     return h + '<button type="button" class="mas" data-a="agregarRelleno">+ Agregar ingrediente</button>' +
-      (autoFactores() ? '<p class="nota">Los botones son opcionales (para otras coberturas o rellenos agrégalos a mano). Calculan los gramos según el tamaño, los pisos y la cantidad de tortas: cobertura por los lados y la parte de arriba (base: circular 20 cm × 15 cm = 1.5 recetas de butternache) y relleno por el área (360 g en 20 cm, 2 capas). Se recalculan solos si cambias el tamaño; si escribes los gramos a mano, quedan fijos.</p>' : (S.forma === 'Rectangular' || S.pisos.some(function (x) { return x.forma === 'Rectangular'; }) ? '<p class="nota">Rectangular: cobertura y relleno a mano.</p>' : ''));
+      (autoFactores() ? '<p class="nota">Los botones son opcionales (para otras coberturas o rellenos agrégalos a mano). Calculan los gramos según el tamaño, los pisos y la cantidad de tortas: cobertura por los lados y la parte de arriba (base: circular 20 cm × 15 cm = 1.5 recetas de butternache) y relleno por el área (360 g en 20 cm, 2 capas). Se recalculan solos si cambias el tamaño; si escribes los gramos a mano, quedan fijos.</p>' : (S.conTorta ? '<p class="nota">Rectangular y cuadrado: cobertura y relleno a mano (el cálculo automático es solo para circulares).</p>' : ''));
   }
   function htmlExtras() {
     var h = '';
