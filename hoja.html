@@ -394,7 +394,7 @@ function renderSheet(){const tt=totals(),t=tt.t;
 /* Diseño 2026-10-30 (aprobado, v7): detalle único por grupos; cada grupo aparece solo si el pedido lo tiene */
 const G={caj:{t:"Porciones en cajas individuales",c:"#D8334F",bg:"#FBE3E7",tx:"#D8334F"},boc:{t:"Bocaditos",c:"#EA7038",bg:"#FDE9DE",tx:"#B4541F"},tem:{t:"Bocaditos temáticos",c:"#E66B8C",bg:"#FCE4EC",tx:"#B8466A"},pos:{t:"Postres",c:"#7A1432",bg:"#F5E1E6",tx:"#7A1432"}};
 const filled=S.bocas.filter(b=>has(b.n)||has(b.c)||has(b.p));
-const grupo=b=>{if(b.g&&G[b.g])return b.g;const pr=PRODS[String(b.n||"").trim().toLowerCase()];return pr&&pr.g?pr.g:"boc"};
+const grupo=b=>{if(b.g&&G[b.g])return b.g;if(/^\s*(Porciones de torta|Torta en cajitas)/i.test(String(b.n||"")))return "caj";const pr=PRODS[String(b.n||"").trim().toLowerCase()];return pr&&pr.g?pr.g:"boc"};
 const porG={caj:[],boc:[],tem:[],pos:[]};filled.forEach(b=>porG[grupo(b)].push(b));
 const hayTorta=["tematica","porciones","pisos","sabor","relleno","cobertura","colores","mensaje","decoracion","precioTorta"].some(k=>has(S[k]));
 const vacio=!hayTorta&&!filled.length;

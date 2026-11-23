@@ -1116,7 +1116,7 @@
   function unicos(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }); }
   function abrirHojaCliente(d) {
     guardarLS('dz_hoja_prefill', { id: uid(), d: d });
-    location.href = 'hoja.html';
+    location.href = 'hoja.html?v=20261123b';
   }
   function datosHojaCotizacion() {
     var r = calc.r, d = { nombre: S.cliente || '', bocas: [] };
@@ -1163,7 +1163,7 @@
 
   function irA(v) {
     if (v === 'cotizar') { location.hash = 'cotizar'; return; }
-    if (v === 'hoja') { location.href = 'hoja.html'; return; }
+    if (v === 'hoja') { location.href = 'hoja.html?v=20261123b'; return; }
     if (v === 'boleta') { location.href = 'boleta.html'; return; }
     if (v === 'carta') { location.href = 'carta.html'; return; }
     if (v === 'dashboard') { location.href = 'dashboard.html'; return; }
