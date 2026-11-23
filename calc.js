@@ -175,6 +175,7 @@ var DZCalc = (function () {
    * pero sin nivel de diseño ni prima, y con el costo de las cajitas como "extra" (margen de gestión de extras).
    * El resultado trae una sola línea con el total: el precio por porción no se muestra ni se guarda.
    */
+  var CAJ_MIN_TAJADAS_PRECIO_FIJO = 25, CAJ_PRECIO_TAJADA = 10;
   function cajitas(CAT, c) {
     var vacio = { lineas: [], total: 0, sinIGV: 0, igv: 0, costo: 0, manoObra: 0, utilidad: 0, renta: 0, utilidadNeta: 0, gananciaFamilia: 0, ok: true, error: null };
     var n = Math.max(0, Math.round(Number(c && c.n) || 0));
@@ -207,6 +208,9 @@ var DZCalc = (function () {
     var r10 = r8 + r9;
     var precioConIGV = r10 * (1 + P.igv);
     var precio = Math.round(Math.round(precioConIGV * 100) / 100);
+    // 23/11/2026: desde 25 tajadas el precio es fijo de S/ 10 por tajada (IGV incluido); el total sustituye al calculado por costos
+    var precioFijoTajada = n >= CAJ_MIN_TAJADAS_PRECIO_FIJO;
+    if (precioFijoTajada) precio = n * CAJ_PRECIO_TAJADA;
     var valorVentaFinal = precio / (1 + P.igv);
     var igvFinal = precio - valorVentaFinal;
     var costoTotal = r5 + empaqueNeto;
@@ -217,7 +221,7 @@ var DZCalc = (function () {
     var nombre = 'Torta en cajitas · ' + (c.sabor || '');
     return {
       ok: rr.ok, error: rr.ok ? null : rr.error,
-      n: n, sabor: c.sabor, tamano: c.tamano, minutos: minutos, rellenoDetalle: rellenoDetalle,
+      n: n, precioFijoTajada: precioFijoTajada, sabor: c.sabor, tamano: c.tamano, minutos: minutos, rellenoDetalle: rellenoDetalle,
       lineas: [{ nombre: nombre, detalle: '', paquetes: 1, unidades: n, precioPaquete: precio, total: precio,
         sinIGV: valorVentaFinal, costo: costoTotal, manoObra: r7, utilidad: utilidadAntesRenta, caj: true }],
       total: precio, sinIGV: valorVentaFinal, igv: igvFinal, costo: costoTotal, manoObra: r7, utilidad: utilidadAntesRenta,
