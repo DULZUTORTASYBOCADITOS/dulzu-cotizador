@@ -74,6 +74,8 @@ try{var pf=JSON.parse(localStorage.getItem('dz_hoja_prefill')||'null');if(pf&&pf
 .q .q-l b{color:#3F2B26;font-weight:400}
 .q .q-t{display:flex;justify-content:space-between;align-items:baseline;background:#7A1432;color:#fff;border-radius:2mm;padding:3mm 4mm;margin-top:2.4mm}
 .q .q-t span{font:400 14pt Fraunces,Georgia,serif}.q .q-t b{font:500 16pt Fraunces,Georgia,serif;font-variant-numeric:tabular-nums}
+.q .q-sep{border-top:.3mm solid #EADBCF;margin:1.4mm 1mm 0}
+.q .q-l.dg{color:#3F2B26}
 .q .q-igv{text-align:right;font-size:7.4pt;color:#6F5036;margin-top:1mm}
 .q .q-pie{margin:auto 14mm 10mm;padding-top:3.4mm;border-top:.3mm solid #EADBCF;display:flex;justify-content:space-between;align-items:center}
 .q .q-pie .g{font:400 11pt Fraunces,Georgia,serif;color:#7A1432}
@@ -125,6 +127,14 @@ input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px soli
 .money{position:relative}
 .money::before{content:"S/";position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none}
 .money input{padding-left:30px;font-variant-numeric:tabular-nums;text-align:right}
+.sw{flex-direction:row;align-items:flex-start;gap:12px;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--field);cursor:pointer;text-transform:none;letter-spacing:0;font-size:15px;font-weight:500;color:var(--ink)}
+.sw input{position:absolute;opacity:0;width:1px;height:1px;padding:0;border:0}
+.sw .tr{flex:none;width:42px;height:24px;border-radius:999px;background:var(--line);position:relative;margin-top:1px;transition:background .15s}
+.sw .tr::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+.sw input:checked+.tr{background:var(--accent)}
+.sw input:checked+.tr::after{transform:translateX(18px)}
+.sw input:focus-visible+.tr{outline:2px solid var(--focus);outline-offset:2px}
+.sw small{display:block;font-size:12.5px;font-weight:400;color:var(--muted);margin-top:2px}
 .hint{font-size:12.5px;color:var(--muted);margin:8px 0 0;text-transform:none;letter-spacing:0;font-weight:400}
 .bocas{display:flex;flex-direction:column;gap:8px}
 .boca{display:grid;grid-template-columns:minmax(0,1fr) 78px 120px 38px;gap:8px;align-items:center}
@@ -299,6 +309,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
           <label for="descuento">Descuento<span class="money"><input id="descuento" data-k="descuento" type="number" min="0" step="0.5" inputmode="decimal"></span></label>
         </div>
         <label for="obs" style="margin-top:10px">Observaciones<textarea id="obs" data-k="obs" maxlength="170"></textarea></label>
+        <label class="sw" for="igvDesglose"><input id="igvDesglose" type="checkbox" role="switch"><span class="tr" aria-hidden="true"></span><span>Desglosar IGV en la cotización<small>Muestra Valor de venta (sin IGV), IGV 18% y Total. Útil para empresas.</small></span></label>
         <div class="sum total"><span>Total <small style="font-family:var(--body);font-size:13px;opacity:.85">(IGV incluido)</small></span><b id="sum-total">S/ 0.00</b></div>
         <p class="hint" style="text-align:right">Incluye IGV (18%): <b id="sum-igv">S/ 0.00</b></p>
       </fieldset>
@@ -333,7 +344,7 @@ const iso=d=>{const z=new Date(d.getTime()-d.getTimezoneOffset()*6e4);return z.t
 const fmtDate=s=>{if(!s)return"";const [y,m,d]=s.split("-");return `${d}/${m}/${y}`};
 
 function blank(){const t=new Date(),v=new Date();v.setDate(t.getDate()+7);
-  return {fecha:iso(t),valida:iso(v),entrega:"",nombre:"",whatsapp:"",correo:"",empresa:"",direccion:"",tematica:"",porciones:"",pisos:"",sabor:"",relleno:"",cobertura:"",colores:"",mensaje:"",decoracion:"",precioTorta:"",delivery:"",descuento:"",obs:"",bocas:[{n:"",c:"",p:""}]};}
+  return {fecha:iso(t),valida:iso(v),entrega:"",nombre:"",whatsapp:"",correo:"",empresa:"",direccion:"",tematica:"",porciones:"",pisos:"",sabor:"",relleno:"",cobertura:"",colores:"",mensaje:"",decoracion:"",precioTorta:"",delivery:"",descuento:"",obs:"",igvDesglose:false,bocas:[{n:"",c:"",p:""}]};}
 function example(){const s=blank();Object.assign(s,{nombre:"Ejemplo: María López",whatsapp:"999 999 999",correo:"",empresa:"",direccion:"Av. Ejemplo 123, Miraflores",
   tematica:"Cumpleaños – jardín encantado",porciones:"25 porciones",pisos:"2 pisos, redonda",sabor:"Vainilla",relleno:"Manjar y fresas",cobertura:"Buttercream",colores:"Rosa pastel y blanco",mensaje:"Feliz cumpleaños Sofía",
   decoracion:"Flores de buttercream en tonos rosa, mariposas de papel comestible y topper con nombre.",precioTorta:"180",delivery:"15",descuento:"",obs:"Datos de ejemplo: reemplázalos con los del cliente.",
@@ -347,7 +358,8 @@ if(window.__PREFILL){let used=null;try{used=localStorage.getItem("dulzu-prefill-
 
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 
-function fillForm(){document.querySelectorAll("[data-k]").forEach(el=>{el.value=S[el.dataset.k]??""});renderBocas();}
+function fillForm(){document.querySelectorAll("[data-k]").forEach(el=>{el.value=S[el.dataset.k]??""});$("igvDesglose").checked=!!S.igvDesglose;renderBocas();}
+$("igvDesglose").addEventListener("change",e=>{S.igvDesglose=e.target.checked;update()});
 function renderBocas(){const box=$("bocas");box.innerHTML="";
   S.bocas.forEach((b,i)=>{const r=document.createElement("div");r.className="boca";
     r.innerHTML=`<input id="bn${i}" list="dz-prods" aria-label="Bocadito ${i+1}" maxlength="60" value="${esc(b.n)}">`+
@@ -374,6 +386,8 @@ function autoP(i){const b=S.bocas[i],pr=PRODS[String(b.n||"").trim().toLowerCase
 function totals(){const tb=S.bocas.reduce((a,b)=>a+num(b.p),0);
   const t=num(S.precioTorta)+tb+num(S.delivery)-num(S.descuento);return {tb,t};}
 
+const IGV_T=.18;
+function igvParts(t){const tot=Math.round(t*100)/100,base=Math.round(tot/(1+IGV_T)*100)/100;return {base,igv:Math.round((tot-base)*100)/100,tot}}
 function f(v){return has(v)?esc(v):""}
 function lines(n,pitch){let h="";for(let i=1;i<=n;i++)h+=`<div class="rl" style="top:${i*pitch-.3}mm"></div>`;return h}
 function renderSheet(){const tt=totals(),t=tt.t;
@@ -409,6 +423,8 @@ if(verTorta)tl+=L1("Torta",has(S.precioTorta)?money(num(S.precioTorta)):"S/");
 grupos.forEach(g=>{tl+=L1(G[g].t,conP(g)?money(sumG(g)):"S/")});
 if(has(S.delivery))tl+=L1("Delivery",money(num(S.delivery)));
 if(has(S.descuento))tl+=L1("Descuento","– "+money(num(S.descuento)));
+const dg=!!S.igvDesglose&&anyTot,ip=igvParts(t);
+if(dg)tl+='<div class="q-sep"></div><div class="q-l dg"><span>Valor de venta (sin IGV)</span><b>'+money(ip.base)+'</b></div><div class="q-l dg"><span>IGV (18%)</span><b>'+money(ip.igv)+'</b></div>';
 const contacto=jn([has(S.whatsapp)?"WhatsApp "+S.whatsapp:"",S.correo,S.empresa,S.direccion]);
 $("sheet").innerHTML='<div class="page q">'+
 '<div class="q-stripe"><i style="background:#D8334F"></i><i style="background:#EA7038"></i><i style="background:#E66B8C"></i><i style="background:#7A1432"></i></div>'+
@@ -421,7 +437,7 @@ $("sheet").innerHTML='<div class="page q">'+
 '<div class="li">Separa tu fecha con al menos 5 días de anticipación (tortas temáticas: 7 días).</div>'+
 '<div class="li">El delivery se cotiza según distrito. Precios válidos por 30 días desde la fecha de la cotización.</div>'+
 (has(S.obs)?'<div class="ob"><b>Observaciones:</b> '+esc(S.obs)+'</div>':"")+'</div>'+
-'<div class="q-tot">'+tl+'<div class="q-t"><span>Total</span><b>'+(anyTot?money(t):"S/")+'</b></div><div class="q-igv">Incluye IGV (18%)</div></div></div>'+
+'<div class="q-tot">'+tl+'<div class="q-t"><span>'+(dg?"Total a pagar":"Total")+'</span><b>'+(anyTot?money(t):"S/")+'</b></div><div class="q-igv">'+(dg?"Los importes del detalle incluyen IGV (18%)":"Incluye IGV (18%)")+'</div></div></div>'+
 '<div class="q-pie"><span class="g">¡Gracias por endulzar tu celebración con nosotros!</span><img src="monograma.svg" alt=""></div></div>';
 const page=$("sheet").querySelector(".page");const no=()=>page.scrollHeight>page.clientHeight+1;
 if(no())page.classList.add("c1");if(no())page.classList.add("c2");
