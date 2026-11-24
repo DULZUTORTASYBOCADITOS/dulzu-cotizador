@@ -116,11 +116,16 @@
     var l = (CAT && CAT.init && CAT.init.sabores) || [];
     return l.filter(function (x) { return /vainilla/i.test(x); })[0] || l[0] || '';
   }
+  // El sabor de las porciones es siempre el mismo de la torta
+  function cajSabor() {
+    var l = (CAT && CAT.init && CAT.init.sabores) || [];
+    return (S.sabor && l.indexOf(S.sabor) >= 0) ? S.sabor : cajSaborBase();
+  }
   function cajAuto(c) { c = c || S.caj; if (!c.tamManual) c.tamano = cajTamSugerido(Number(c.n) || 0); }
   function cajPayload() {
     var c = S.caj;
     if (!c || !c.on) return null;
-    return { on: true, n: Number(c.n) || 0, sabor: cajSaborBase(), tamano: c.tamano,
+    return { on: true, n: Number(c.n) || 0, sabor: cajSabor(), tamano: c.tamano,
       minTrabajo: Number(c.minTrabajo) || 0, minHorno: Number(c.minHorno) || 0, minBat: Number(c.minBat) || 0, costoCajita: Number(c.costoCajita) || 0,
       rellenos: [] };
   }
@@ -218,7 +223,7 @@
     if (ce) { var cer = S.caj.on && cj && cj.error; ce.hidden = !cer; ce.textContent = cer ? 'Sin costo de receta: ' + cj.error : ''; }
     var cn = $('cajTamNota');
     if (cn) {
-      var est = porcionesDe(S.caj.tamano), rc = DZCalc.costoReceta(CAT, cajSaborBase(), 'Rectangular', S.caj.tamano), corta = est != null && est < (Number(S.caj.n) || 0);
+      var est = porcionesDe(S.caj.tamano), rc = DZCalc.costoReceta(CAT, cajSabor(), 'Rectangular', S.caj.tamano), corta = est != null && est < (Number(S.caj.n) || 0);
       cn.textContent = S.caj.tamano ? S.caj.tamano + (est != null ? ': alcanza para ≈' + est + ' porciones (estimado por área)' : '') + (rc.ok ? ' · receta ' + fmt(rc.costo) : ' · sin receta') + (corta ? '. Ojo: pediste ' + S.caj.n + ', elige un tamaño más grande.' : '') : '';
       cn.style.color = corta ? 'var(--vino)' : '';
     }
@@ -435,15 +440,14 @@
     var c = S.caj;
     var h = '<section class="sec" aria-label="Torta en cajitas"><div class="sec-h"><i class="petal c-torta"></i><h2>Torta en cajitas</h2><span class="precio" id="cajPrecio"></span>' +
       '<button type="button" class="sw" role="switch" aria-checked="' + c.on + '" aria-label="Incluir torta en cajitas" data-a="cajOn"></button></div>';
-    if (!c.on) return h + '<p class="nota" style="padding:0 14px 14px;margin:0">Una torta rectangular sin decoración, de cualquier sabor, cortada y empacada en cajitas. Útil cuando piden muchas porciones.</p></section>';
+    if (!c.on) return h + '<p class="nota" style="padding:0 14px 14px;margin:0">Una torta rectangular sin decoración, del mismo sabor de la torta, cortada y empacada en cajitas. Útil cuando piden muchas porciones.</p></section>';
     h += '<div class="aviso" id="cajError" hidden></div>';
     h += '<div class="fila"><span class="k">Porciones<small>En cajitas</small></span>' + stepper('cajN', Number(c.n) || 0, 1, { label: 'Porciones en cajitas' }) + '</div>';
-    h += '<div class="fila"><span class="k">Sabor<small>Cualquier sabor, incluido en el precio</small></span><span class="v">A elección</span></div>';
+    h += '<div class="fila"><span class="k">Sabor<small>El mismo de la torta</small></span><span class="v">' + esc(cajSabor()) + '</span></div>';
     var tl = CAT.init.tamanosPorForma.Rectangular || [];
     h += '<div class="bloque"><span class="lbl">Tamaño de la rectangular</span><div class="chips" data-k="tamCaj">' + (tl.length ? tl.map(function (t) {
       return '<button type="button" class="chip" data-a="cajTam" data-v="' + esc(t) + '" aria-pressed="' + (t === c.tamano) + '">' + esc(t) + '</button>';
     }).join('') : '<span class="nota">No hay tamaños rectangulares.</span>') + '</div><p class="nota" id="cajTamNota"></p></div>';
-    h += acc('cajTrabajo', 'Tiempo y cajitas', htmlCajTrabajo());
     return h + '</section>';
   }
   function htmlCajTrabajo() {
@@ -614,7 +618,7 @@
     if (cj.lineas.length) {
       var hrsC = (cj.minutos || 0) / 60;
       var redC = (cj.utilidadNeta || 0) + (cj.renta || 0) - (cj.margen || 0) - (cj.margenExtras || 0);
-      h += tarjeta({ titulo: 'Torta en cajitas', precio: cj.total, sub: cj.n + ' porciones · sabor a elección · rectangular ' + cj.tamano,
+      h += tarjeta({ titulo: 'Torta en cajitas', precio: cj.total, sub: cj.n + ' porciones · ' + cj.sabor + ' · rectangular ' + cj.tamano,
         filas: [['IGV 18% (va a SUNAT)', cj.igv], ['Insumos (keke + relleno)', cj.insumos], ['Cajitas (sin IGV)', cj.empaque],
           ['Gastos fijos + gas y luz', cj.costosFijos], ['Mano de obra de Katherine (' + (cj.minutos || 0) + ' min)', cj.manoObra], ['Renta RER 1.5%', cj.renta]],
         neta: cj.utilidadNeta, fam: cj.gananciaFamilia,
@@ -1117,7 +1121,7 @@
   function unicos(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }); }
   function abrirHojaCliente(d) {
     guardarLS('dz_hoja_prefill', { id: uid(), d: d });
-    location.href = 'hoja.html?v=20261123d';
+    location.href = 'hoja.html?v=20261123e';
   }
   function datosHojaCotizacion() {
     var r = calc.r, d = { nombre: S.cliente || '', bocas: [] };
@@ -1164,7 +1168,7 @@
 
   function irA(v) {
     if (v === 'cotizar') { location.hash = 'cotizar'; return; }
-    if (v === 'hoja') { location.href = 'hoja.html?v=20261123d'; return; }
+    if (v === 'hoja') { location.href = 'hoja.html?v=20261123e'; return; }
     if (v === 'boleta') { location.href = 'boleta.html'; return; }
     if (v === 'carta') { location.href = 'carta.html'; return; }
     if (v === 'dashboard') { location.href = 'dashboard.html'; return; }

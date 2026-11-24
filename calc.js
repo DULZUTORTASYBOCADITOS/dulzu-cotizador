@@ -218,7 +218,7 @@ var DZCalc = (function () {
     var renta = valorVentaFinal * P.renta;
     var utilidadNeta = utilidadAntesRenta - renta;
     var gananciaFamilia = utilidadNeta + r7;
-    var nombre = 'Torta en cajitas · sabor a elección';
+    var nombre = 'Torta en cajitas · ' + (c.sabor || '');
     return {
       ok: rr.ok, error: rr.ok ? null : rr.error,
       n: n, precioFijoTajada: precioFijoTajada, sabor: c.sabor, tamano: c.tamano, minutos: minutos, rellenoDetalle: rellenoDetalle,
