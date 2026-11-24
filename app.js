@@ -121,21 +121,34 @@
     var l = (CAT && CAT.init && CAT.init.sabores) || [];
     return (S.sabor && l.indexOf(S.sabor) >= 0) ? S.sabor : cajSaborBase();
   }
-  // Relleno y cobertura = los de la torta elegida, escalados por área (rectangular de las cajitas ÷ área total de la torta)
-  function areaMolde(forma, tam) {
+  // Relleno y cobertura de las cajitas, a partir de los de la torta elegida (23/11/2026):
+  //  - relleno: la mitad, en proporción al área (rectangular ÷ área total de la torta) → 1 capa en vez de 2
+  //  - cobertura: solo la parte de arriba (área de la rectangular ÷ superficie cubierta de la torta: arriba + lados)
+  // Cobertura = ingredientes marcados por el botón automático o con nombre de la cobertura butternache; el resto es relleno.
+  function medidaMolde(forma, tam) {
     var m = String(tam || '').match(/(\d+(?:[.,]\d+)?)(?:\s*[x×X]\s*(\d+(?:[.,]\d+)?))?/);
     if (!m) return null;
     var a = parseFloat(m[1].replace(',', '.')), b = m[2] ? parseFloat(m[2].replace(',', '.')) : a;
-    return /circ/i.test(forma) ? Math.PI * a * a / 4 : a * b;
+    return /circ/i.test(forma) ? { area: Math.PI * a * a / 4, perim: Math.PI * a } : { area: a * b, perim: 2 * (a + b) };
+  }
+  function esCobertura(r) {
+    if (r.auto === 'cob') return true;
+    if (r.auto === 'rel') return false;
+    return AUTO.cob.some(function (x) { return x[0].toLowerCase() === String(r.ingrediente || '').trim().toLowerCase(); });
   }
   function cajRellenos(c) {
     if (!S.conTorta) return [];
-    var pisos = [{ forma: S.forma, tamano: S.tamano }].concat(S.pisos || []);
-    var at = pisos.reduce(function (t, x) { var v = areaMolde(x.forma, x.tamano); return t == null || v == null ? null : t + v; }, 0);
-    var ac = areaMolde('Rectangular', c.tamano);
-    var f = at && ac ? ac / (at * (Number(S.cantidad) || 1)) : 1;
+    var area = 0, sup = 0, ok = true;
+    [{ forma: S.forma, tamano: S.tamano }].concat(S.pisos || []).forEach(function (x) {
+      var m = medidaMolde(x.forma, x.tamano); if (!m) { ok = false; return; }
+      area += m.area; sup += m.area + m.perim * AUTO.alto;
+    });
+    var q = Math.max(1, Math.round(Number(S.cantidad) || 1));
+    var mc = medidaMolde('Rectangular', c.tamano);
+    if (!ok || !mc || !area) return [];
+    var fRel = 0.5 * mc.area / (area * q), fCob = mc.area / (sup * q);
     return (S.rellenos || []).filter(function (r) { return r.ingrediente && Number(r.cantidad) > 0; })
-      .map(function (r) { return { ingrediente: r.ingrediente, cantidad: String(Math.round(Number(r.cantidad) * f)) }; });
+      .map(function (r) { return { ingrediente: r.ingrediente, cantidad: String(Math.round(Number(r.cantidad) * (esCobertura(r) ? fCob : fRel))) }; });
   }
   function cajAuto(c) { c = c || S.caj; if (!c.tamManual) c.tamano = cajTamSugerido(Number(c.n) || 0); }
   function cajPayload() {
@@ -1137,7 +1150,7 @@
   function unicos(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }); }
   function abrirHojaCliente(d) {
     guardarLS('dz_hoja_prefill', { id: uid(), d: d });
-    location.href = 'hoja.html?v=20261123f';
+    location.href = 'hoja.html?v=20261123g';
   }
   function datosHojaCotizacion() {
     var r = calc.r, d = { nombre: S.cliente || '', bocas: [] };
@@ -1184,7 +1197,7 @@
 
   function irA(v) {
     if (v === 'cotizar') { location.hash = 'cotizar'; return; }
-    if (v === 'hoja') { location.href = 'hoja.html?v=20261123f'; return; }
+    if (v === 'hoja') { location.href = 'hoja.html?v=20261123g'; return; }
     if (v === 'boleta') { location.href = 'boleta.html'; return; }
     if (v === 'carta') { location.href = 'carta.html'; return; }
     if (v === 'dashboard') { location.href = 'dashboard.html'; return; }
