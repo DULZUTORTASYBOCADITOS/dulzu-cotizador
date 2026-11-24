@@ -86,7 +86,7 @@
       id: uid(), estado: 'nueva', cliente: '', conTorta: true, cantidad: 1,
       sabor: CAT.init.sabores[0] || '', forma: forma, tamano: (CAT.init.tamanosPorForma[forma] || [])[0] || '',
       nivel: (CAT.niveles[0] || {}).nombre || '',
-      minBase: 120, minExtra: 0, minHorno: 50, minBat: 15,
+      minBase: 120, minExtra: 0, minHorno: 60, minBat: 60,
       pisos: [], rellenos: [], extras: extras, items: {}, cargada: null, caj: nuevaCaj()
     };
   }
