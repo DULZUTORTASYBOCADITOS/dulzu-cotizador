@@ -121,13 +121,29 @@
     var l = (CAT && CAT.init && CAT.init.sabores) || [];
     return (S.sabor && l.indexOf(S.sabor) >= 0) ? S.sabor : cajSaborBase();
   }
+  // Relleno y cobertura = los de la torta elegida, escalados por área (rectangular de las cajitas ÷ área total de la torta)
+  function areaMolde(forma, tam) {
+    var m = String(tam || '').match(/(\d+(?:[.,]\d+)?)(?:\s*[x×X]\s*(\d+(?:[.,]\d+)?))?/);
+    if (!m) return null;
+    var a = parseFloat(m[1].replace(',', '.')), b = m[2] ? parseFloat(m[2].replace(',', '.')) : a;
+    return /circ/i.test(forma) ? Math.PI * a * a / 4 : a * b;
+  }
+  function cajRellenos(c) {
+    if (!S.conTorta) return [];
+    var pisos = [{ forma: S.forma, tamano: S.tamano }].concat(S.pisos || []);
+    var at = pisos.reduce(function (t, x) { var v = areaMolde(x.forma, x.tamano); return t == null || v == null ? null : t + v; }, 0);
+    var ac = areaMolde('Rectangular', c.tamano);
+    var f = at && ac ? ac / (at * (Number(S.cantidad) || 1)) : 1;
+    return (S.rellenos || []).filter(function (r) { return r.ingrediente && Number(r.cantidad) > 0; })
+      .map(function (r) { return { ingrediente: r.ingrediente, cantidad: String(Math.round(Number(r.cantidad) * f)) }; });
+  }
   function cajAuto(c) { c = c || S.caj; if (!c.tamManual) c.tamano = cajTamSugerido(Number(c.n) || 0); }
   function cajPayload() {
     var c = S.caj;
     if (!c || !c.on) return null;
     return { on: true, n: Number(c.n) || 0, sabor: cajSabor(), tamano: c.tamano,
       minTrabajo: Number(c.minTrabajo) || 0, minHorno: Number(c.minHorno) || 0, minBat: Number(c.minBat) || 0, costoCajita: Number(c.costoCajita) || 0,
-      rellenos: [] };
+      rellenos: cajRellenos(c) };
   }
   function empaque(nombre) { return (CAT.empaques || []).filter(function (e) { return e.nombre === nombre; })[0] || null; }
 
@@ -1121,7 +1137,7 @@
   function unicos(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }); }
   function abrirHojaCliente(d) {
     guardarLS('dz_hoja_prefill', { id: uid(), d: d });
-    location.href = 'hoja.html?v=20261123e';
+    location.href = 'hoja.html?v=20261123f';
   }
   function datosHojaCotizacion() {
     var r = calc.r, d = { nombre: S.cliente || '', bocas: [] };
@@ -1168,7 +1184,7 @@
 
   function irA(v) {
     if (v === 'cotizar') { location.hash = 'cotizar'; return; }
-    if (v === 'hoja') { location.href = 'hoja.html?v=20261123e'; return; }
+    if (v === 'hoja') { location.href = 'hoja.html?v=20261123f'; return; }
     if (v === 'boleta') { location.href = 'boleta.html'; return; }
     if (v === 'carta') { location.href = 'carta.html'; return; }
     if (v === 'dashboard') { location.href = 'dashboard.html'; return; }
