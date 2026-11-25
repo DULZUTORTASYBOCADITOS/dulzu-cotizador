@@ -503,12 +503,12 @@
     return h + '<p class="nota">Pon los gramos que lleva la rectangular completa (mismo relleno y cobertura que la torta).</p>';
   }
 
-  // ---------- packs de temáticos (17/11/2026): los de "Packs de sacramentos"; suman los temáticos de golpe ----------
+  // ---------- packs de temáticos (17/11/2026; nuevos packs 24/11/2026): desde 12 temáticos, en grupos de 4 de cada uno; suman los temáticos de golpe ----------
   var PACKS_TEM = [
-    { n: 'Detalle', c: { cakepop: 3, galleta: 3 } },
-    { n: 'Clásico', c: { cakepop: 4, galleta: 4, cupcake: 4 } },
-    { n: 'Celebración', c: { cakepop: 5, galleta: 4, cupcake: 3, chocobrownie: 3 } },
-    { n: 'Gran celebración', c: { cakepop: 8, galleta: 6, lacepop: 6, cupcake: 5, chocobrownie: 5 } }
+    { n: 'Clásico', c: { cakepop: 4, cupcake: 4, galleta: 4 } },
+    { n: 'Fiesta', c: { cakepop: 4, chocooreo: 4, cupcake: 4, galleta: 4 } },
+    { n: 'Celebración', c: { cakepop: 4, chocooreo: 4, cupcake: 4, galleta: 4, lacepop: 4 } },
+    { n: 'Gran fiesta', c: { cakepop: 4, chocooreo: 4, cupcake: 4, galleta: 4, lacepop: 4, chocomanzana: 4, chocobrownie: 4 } }
   ];
   function productoTem(clave) {
     var k = norm(clave).replace(/s$/, '');
