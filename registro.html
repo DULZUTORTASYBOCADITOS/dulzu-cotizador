@@ -220,7 +220,7 @@ $('guardar').onclick = () => {
   const box = $('c-msg');
   if (!f.fecha || !f.serie) { box.innerHTML = '<div class="msg err">Completa la fecha y la serie y número.</div>'; return; }
   if (f.tipo === '01' && !/^\d{11}$/.test(f.ruc)) { box.innerHTML = '<div class="msg err">El RUC del proveedor debe tener 11 dígitos.</div>'; return; }
-  if (ITEMS.length && Math.round(ITEMS.reduce((s, x) => s + x.sub, 0) * 100) !== Math.round(totalActual() * 100)) { box.innerHTML = '<div class="msg err">Los productos no suman exactamente el total de la factura. Corrigelos o quitalos con la X antes de registrar.</div>'; return; }
+  if (ITEMS.length && Math.abs(Math.round(ITEMS.reduce((s, x) => s + x.sub, 0) * 100) - Math.round(totalActual() * 100)) > 2) { box.innerHTML = '<div class="msg err">Los productos no suman el total de la factura (se acepta hasta S/ 0.02 de diferencia por redondeo). Corrigelos o quitalos con la X antes de registrar.</div>'; return; }
   $('guardar').disabled = true; box.innerHTML = '<div class="msg">Guardando…</div>';
   run('apiRegistrarCompra', f).then(r => {
     box.innerHTML = `<div class="msg ${r.dup ? 'err' : 'ok'}">${esc(r.msg)}</div>`;
@@ -359,7 +359,7 @@ function pintarItems() {
       '<td style="width:36px"><button class="x" type="button" data-del="' + i + '" aria-label="Quitar producto">×</button></td></tr>').join('') + '</tbody>' : '';
   const suma = ITEMS.reduce((s, x) => s + x.sub, 0), tot = totalActual();
   let h = ITEMS.length ? 'Suma de productos: <b>S/ ' + f2(suma) + '</b>' : '';
-  if (ITEMS.length && tot) { const dif = Math.abs(suma - tot), okc = Math.round(dif * 100) === 0; h = '<div class="chk ' + (okc ? 'ok' : 'bad') + '"><span class="chk-i">' + (okc ? '&#10003;' : '!') + '</span><div>' + (okc ? '<b>' + (dif < 0.01 ? 'Cuadra exacto con el total' : 'Cuadra con el total') + '</b><br>Productos S/ ' + f2(suma) + ' = comprobante S/ ' + f2(tot) : '<b>No cuadra con el total</b><br>Productos S/ ' + f2(suma) + ' · comprobante S/ ' + f2(tot) + '. Revisa los productos.') + '</div></div>'; }
+  if (ITEMS.length && tot) { const dif = Math.abs(suma - tot), cts = Math.round(dif * 100), okc = cts <= 2; h = '<div class="chk ' + (okc ? 'ok' : 'bad') + '"><span class="chk-i">' + (okc ? '&#10003;' : '!') + '</span><div>' + (okc ? (cts === 0 ? '<b>Cuadra exacto con el total</b><br>Productos S/ ' + f2(suma) + ' = comprobante S/ ' + f2(tot) : '<b>Cuadra con el total (diferencia de S/ ' + f2(cts / 100) + ' por redondeo)</b><br>Productos S/ ' + f2(suma) + ' · comprobante S/ ' + f2(tot) + '. Puedes registrar.') : '<b>No cuadra con el total</b><br>Productos S/ ' + f2(suma) + ' · comprobante S/ ' + f2(tot) + '. Revisa los productos.') + '</div></div>'; }
   $('items-hint').innerHTML = h;
 }
 $('items').addEventListener('change', e => {
